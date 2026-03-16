@@ -91,7 +91,7 @@ function StopModal({ elapsed, onConfirm, onCancel, isPending }) {
 }
 
 // ── Main component ────────────────────────────────────────────────────
-export default function TimerPanel({ jobId, statusLabel }) {
+export default function TimerPanel({ jobId, statusLabel, compact = false }) {
   const [elapsed, setElapsed]       = useState(0);
   const [showStop, setShowStop]     = useState(false);
   const queryClient = useQueryClient();
