@@ -149,6 +149,20 @@ export default function JobDetail() {
           </div>
         )}
 
+        {/* Geofence badge + alerts */}
+        {isActive && (
+          <div className="flex items-center gap-2 flex-wrap">
+            <LocationBadge
+              jobs={[job]}
+              onStatusChange={handleLocationChange}
+              onAlert={handleGeoAlert}
+            />
+          </div>
+        )}
+        {geoAlerts.length > 0 && (
+          <GeofenceAlerts alerts={geoAlerts} accuracy={gpsAccuracy} />
+        )}
+
         {/* ── Sticky Timer (active jobs only, at top of scrollable area) ── */}
         {isActive && !isReadOnly && activeTab !== 'time' && (
           <div className="bg-emerald-50 border border-emerald-200 rounded-2xl p-3">
