@@ -26,6 +26,7 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 
 import LocationBadge from '../components/time/LocationBadge';
+import GeofenceAlerts from '../components/field/GeofenceAlerts';
 import ActiveTimerCard from '../components/time/ActiveTimerCard';
 import TimelineBar from '../components/time/TimelineBar';
 import JobTimeBreakdown from '../components/time/JobTimeBreakdown';
