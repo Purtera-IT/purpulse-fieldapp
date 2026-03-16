@@ -116,7 +116,7 @@ export default function Jobs() {
 
       {/* ── Sticky header ────────────────────────────────────────── */}
       <div className="sticky top-0 z-10 bg-white/90 backdrop-blur-xl border-b border-slate-100">
-        <div className="max-w-lg mx-auto px-4 pt-5 pb-3">
+        <div className="max-w-2xl mx-auto px-4 pt-5 pb-3">
 
           {/* Title + status */}
           <div className="flex items-center justify-between mb-3">
@@ -214,7 +214,7 @@ export default function Jobs() {
       {/* ── Job list ─────────────────────────────────────────────── */}
       <div
         ref={listRef}
-        className="flex-1 max-w-lg mx-auto w-full px-4 py-4 pb-28"
+        className="flex-1 max-w-2xl mx-auto w-full px-4 py-4 pb-32"
         onTouchStart={onPullStart}
         onTouchEnd={onPullEnd}
       >
