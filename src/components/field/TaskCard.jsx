@@ -10,7 +10,7 @@ import {
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import DeliverableItem from './DeliverableItem';
+import DeliverableItem from './deliverables/DeliverableItem';
 
 const GATE_CFG = {
   blocking: { bg: 'bg-red-500',    label: 'Blocking', tip: 'Cannot proceed to next phase until complete' },
