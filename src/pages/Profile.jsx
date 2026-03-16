@@ -15,9 +15,9 @@ import { MOCK_PROFILE } from '@/lib/mockData';
 import { format } from 'date-fns';
 
 // ── Helpers ──────────────────────────────────────────────────────────
-function SectionCard({ title, children, className }) {
+function SectionCard({ title, children }) {
   return (
-    <div className={cn('bg-white rounded-2xl border border-slate-100 overflow-hidden', className)}>
+    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
       {title && (
         <div className="px-4 py-2.5 border-b border-slate-50">
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
@@ -28,26 +28,31 @@ function SectionCard({ title, children, className }) {
   );
 }
 
-function SettingRow({ icon: Icon, label, sub, value, toggle, onToggle, onClick, iconCls = 'text-slate-500', danger }) {
+function SettingRow({ icon: Icon, label, sub, toggle, onToggle, onClick, iconCls = 'text-slate-500', danger }) {
   return (
-    <div onClick={onClick || (toggle !== undefined ? onToggle : undefined)}
-      className={cn('flex items-center gap-3 px-4 py-3.5 border-b border-slate-100 last:border-0',
+    <div
+      onClick={onClick || (toggle !== undefined ? onToggle : undefined)}
+      className={cn(
+        'flex items-center gap-3 px-4 py-3.5 border-b border-slate-100 last:border-0',
         (onClick || toggle !== undefined) && 'active:bg-slate-50 cursor-pointer',
         danger && 'active:bg-red-50'
-      )}>
+      )}
+    >
       <div className="h-8 w-8 rounded-xl bg-slate-50 flex items-center justify-center flex-shrink-0">
         <Icon className={cn('h-4 w-4', iconCls)} />
       </div>
       <div className="flex-1 min-w-0">
         <p className={cn('text-sm font-semibold', danger ? 'text-red-600' : 'text-slate-800')}>{label}</p>
-        {sub && <p className="text-[11px] text-slate-400 mt-0.5">{sub}</p>}
+        {sub && <p className="text-[11px] text-slate-400 mt-0.5 break-all">{sub}</p>}
       </div>
-      {value && <span className="text-xs text-slate-400 flex-shrink-0">{value}</span>}
       {toggle !== undefined ? (
-        <div onClick={e => { e.stopPropagation(); onToggle?.(); }}
-          className={cn('h-6 w-10 rounded-full transition-colors flex items-center flex-shrink-0 px-0.5',
+        <div
+          onClick={e => { e.stopPropagation(); onToggle?.(); }}
+          className={cn(
+            'h-6 w-10 rounded-full transition-colors flex items-center flex-shrink-0 px-0.5',
             toggle ? 'bg-slate-900 justify-end' : 'bg-slate-200 justify-start'
-          )}>
+          )}
+        >
           <div className="h-5 w-5 rounded-full bg-white shadow-sm" />
         </div>
       ) : onClick ? (
@@ -58,13 +63,13 @@ function SettingRow({ icon: Icon, label, sub, value, toggle, onToggle, onClick, 
 }
 
 function PermissionRow({ icon: Icon, label, sub, status }) {
-  const cfg = {
-    granted:  { cls: 'text-emerald-600 bg-emerald-50', label: 'Granted',  Icon: ShieldCheck },
-    denied:   { cls: 'text-red-600 bg-red-50',         label: 'Denied',   Icon: XCircle     },
-    prompt:   { cls: 'text-amber-600 bg-amber-50',     label: 'Not Set',  Icon: AlertTriangle },
-  }[status] || { cls: 'text-slate-500 bg-slate-50', label: status, Icon: Info };
-  const StatusIcon = cfg.Icon;
-
+  const cfgMap = {
+    granted: { cls: 'text-emerald-600 bg-emerald-50', label: 'Granted',  StatusIcon: ShieldCheck   },
+    denied:  { cls: 'text-red-600 bg-red-50',         label: 'Denied',   StatusIcon: XCircle       },
+    prompt:  { cls: 'text-amber-600 bg-amber-50',     label: 'Not Set',  StatusIcon: AlertTriangle },
+  };
+  const cfg = cfgMap[status] || { cls: 'text-slate-500 bg-slate-50', label: status, StatusIcon: Info };
+  const StatusIcon = cfg.StatusIcon;
   return (
     <div className="flex items-center gap-3 px-4 py-3.5 border-b border-slate-100 last:border-0">
       <div className="h-8 w-8 rounded-xl bg-slate-50 flex items-center justify-center flex-shrink-0">
@@ -82,13 +87,7 @@ function PermissionRow({ icon: Icon, label, sub, status }) {
   );
 }
 
-const CERT_CFG = {
-  valid:         { label: 'Valid',         Icon: ShieldCheck,   cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
-  expiring_soon: { label: 'Expiring Soon', Icon: AlertTriangle, cls: 'bg-amber-50  text-amber-700  border-amber-200'  },
-  expired:       { label: 'Expired',       Icon: XCircle,       cls: 'bg-red-50    text-red-700    border-red-200'    },
-};
-
-function StatChip({ icon: Icon, label, value, color }) {
+function StatChip({ label, value, color }) {
   return (
     <div className={cn('rounded-2xl border p-3 text-center', color)}>
       <p className="text-xl font-black tabular-nums">{value}</p>
@@ -97,24 +96,28 @@ function StatChip({ icon: Icon, label, value, color }) {
   );
 }
 
-// ── Permission detection ─────────────────────────────────────────────
+const CERT_CFG = {
+  valid:         { label: 'Valid',         StatusIcon: ShieldCheck,   cls: 'bg-emerald-50 text-emerald-700 border-emerald-200' },
+  expiring_soon: { label: 'Expiring Soon', StatusIcon: AlertTriangle, cls: 'bg-amber-50  text-amber-700  border-amber-200'  },
+  expired:       { label: 'Expired',       StatusIcon: XCircle,       cls: 'bg-red-50    text-red-700    border-red-200'    },
+};
+
 async function checkPermissions() {
   const perms = {};
-  try { perms.camera   = (await navigator.permissions.query({ name: 'camera' })).state; }   catch { perms.camera   = 'prompt'; }
-  try { perms.location = (await navigator.permissions.query({ name: 'geolocation' })).state; } catch { perms.location = 'prompt'; }
+  try { perms.camera        = (await navigator.permissions.query({ name: 'camera' })).state;        } catch { perms.camera        = 'prompt'; }
+  try { perms.location      = (await navigator.permissions.query({ name: 'geolocation' })).state;   } catch { perms.location      = 'prompt'; }
   try { perms.notifications = (await navigator.permissions.query({ name: 'notifications' })).state; } catch { perms.notifications = 'prompt'; }
   return perms;
 }
 
-// ── Page ─────────────────────────────────────────────────────────────
 export default function Profile() {
-  const [perms, setPerms]   = useState({ camera: 'prompt', location: 'prompt', notifications: 'prompt' });
+  const [perms,      setPerms]      = useState({ camera: 'prompt', location: 'prompt', notifications: 'prompt' });
   const [notifPush,  setNotifPush]  = useState(true);
   const [notifEmail, setNotifEmail] = useState(false);
   const [trackingOn, setTrackingOn] = useState(true);
 
   const { data: user } = useQuery({ queryKey: ['me'], queryFn: () => base44.auth.me(), staleTime: 60_000 });
-  const profile = { ...MOCK_PROFILE, ...(user ?? {}) };
+  const profile  = { ...MOCK_PROFILE, ...(user ?? {}) };
   const initials = profile.full_name
     ? profile.full_name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : '?';
@@ -151,10 +154,10 @@ export default function Profile() {
         <div>
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-0.5">Performance · YTD</p>
           <div className="grid grid-cols-2 gap-2">
-            <StatChip icon={Briefcase}  label="Jobs Completed"  value={profile.stats?.jobs_completed_ytd ?? 47} color="bg-white border-slate-100" />
-            <StatChip icon={Star}       label="Avg CSAT"         value={`${profile.stats?.avg_csat ?? 4.8}/5`}   color="bg-amber-50 border-amber-100" />
-            <StatChip icon={TrendingUp} label="On-Time Rate"     value={`${profile.stats?.on_time_rate ?? 94}%`} color="bg-emerald-50 border-emerald-100" />
-            <StatChip icon={Clock}      label="Hours This Week"  value={profile.stats?.hours_logged_week ?? 38}  color="bg-blue-50 border-blue-100" />
+            <StatChip label="Jobs Completed"  value={profile.stats?.jobs_completed_ytd ?? 47} color="bg-white border-slate-100" />
+            <StatChip label="Avg CSAT"         value={`${profile.stats?.avg_csat ?? 4.8}/5`}   color="bg-amber-50 border-amber-100" />
+            <StatChip label="On-Time Rate"     value={`${profile.stats?.on_time_rate ?? 94}%`} color="bg-emerald-50 border-emerald-100" />
+            <StatChip label="Hours This Week"  value={profile.stats?.hours_logged_week ?? 38}  color="bg-blue-50 border-blue-100" />
           </div>
         </div>
 
@@ -162,7 +165,7 @@ export default function Profile() {
         <SectionCard title="Certifications">
           {(profile.certifications ?? []).map(cert => {
             const cfg = CERT_CFG[cert.status] ?? CERT_CFG.valid;
-            const CertIcon = cfg.Icon;
+            const CertIcon = cfg.StatusIcon;
             return (
               <div key={cert.name} className="flex items-center justify-between px-4 py-3.5 border-b border-slate-100 last:border-0">
                 <div className="flex items-center gap-3">
@@ -182,9 +185,9 @@ export default function Profile() {
 
         {/* ── App Permissions ──────────────────────────── */}
         <SectionCard title="App Permissions">
-          <PermissionRow icon={Camera} label="Camera" sub="Required for evidence capture & QC" status={perms.camera} />
-          <PermissionRow icon={MapPin} label="Location" sub="On-site detection & geofencing" status={perms.location} />
-          <PermissionRow icon={Bell}   label="Notifications" sub="Job alerts & sync updates" status={perms.notifications} />
+          <PermissionRow icon={Camera} label="Camera"        sub="Required for evidence capture & QC" status={perms.camera} />
+          <PermissionRow icon={MapPin} label="Location"      sub="On-site detection & geofencing"      status={perms.location} />
+          <PermissionRow icon={Bell}   label="Notifications" sub="Job alerts & sync updates"           status={perms.notifications} />
           <div className="px-4 py-3 bg-slate-50">
             <p className="text-[10px] text-slate-400 leading-relaxed">
               Permissions are managed by your device OS. If denied, go to <strong>Device Settings → Purpulse</strong> to re-enable.
@@ -195,44 +198,44 @@ export default function Profile() {
         {/* ── Tracking Disclosure ──────────────────────── */}
         <SectionCard title="Tracking & Data">
           <SettingRow
-            icon={MapPin} label="Location Tracking"
+            icon={MapPin}
+            label="Location Tracking"
             sub={trackingOn ? 'GPS logged during active work sessions' : 'Location tracking paused'}
-            toggle={trackingOn} onToggle={() => { setTrackingOn(v => !v); toast.info(trackingOn ? 'Tracking paused' : 'Tracking enabled'); }}
+            toggle={trackingOn}
+            onToggle={() => { setTrackingOn(v => !v); toast.info(trackingOn ? 'Tracking paused' : 'Tracking enabled'); }}
             iconCls="text-blue-500"
           />
-          <div className="px-4 py-3.5 border-b border-slate-100">
-            <div className="flex items-start gap-3">
-              <div className="h-8 w-8 rounded-xl bg-slate-50 flex items-center justify-center flex-shrink-0">
-                <Eye className="h-4 w-4 text-slate-500" />
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-semibold text-slate-800">Tracking Disclosure</p>
-                <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
-                  Purpulse records GPS coordinates, timestamps, and work events during active job sessions.
-                  Data is used for job verification, billing, and QC purposes only. You can export or delete your data via your PM.
-                </p>
-              </div>
+          <div className="flex items-start gap-3 px-4 py-3.5">
+            <div className="h-8 w-8 rounded-xl bg-slate-50 flex items-center justify-center flex-shrink-0">
+              <Eye className="h-4 w-4 text-slate-500" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-slate-800">Tracking Disclosure</p>
+              <p className="text-[11px] text-slate-400 leading-relaxed mt-0.5">
+                Purpulse records GPS coordinates, timestamps, and work events during active job sessions.
+                Data is used for job verification, billing, and QC only. Contact your PM to export or delete your data.
+              </p>
             </div>
           </div>
         </SectionCard>
 
         {/* ── Notification Preferences ─────────────────── */}
         <SectionCard title="Notification Preferences">
-          <SettingRow icon={Bell}   label="Push Notifications" sub="Job assignments, messages, sync alerts" toggle={notifPush}  onToggle={() => setNotifPush(v => !v)}  iconCls="text-slate-500" />
-          <SettingRow icon={User}   label="Email Digests"      sub="Daily job summary to your email"        toggle={notifEmail} onToggle={() => setNotifEmail(v => !v)} iconCls="text-slate-500" />
+          <SettingRow icon={Bell} label="Push Notifications" sub="Job assignments, messages, sync alerts" toggle={notifPush}  onToggle={() => setNotifPush(v => !v)} />
+          <SettingRow icon={User} label="Email Digests"      sub="Daily job summary to your email"        toggle={notifEmail} onToggle={() => setNotifEmail(v => !v)} />
         </SectionCard>
 
-        {/* ── Device / Session ─────────────────────────── */}
+        {/* ── Device & Session ─────────────────────────── */}
         <SectionCard title="Device & Session">
-          <SettingRow icon={Smartphone} label="Device ID"       sub={deviceId}               iconCls="text-slate-400" value="" />
-          <SettingRow icon={Shield}     label="Session"         sub="Active · SSO authenticated"  iconCls="text-emerald-500" />
-          <SettingRow icon={Info}       label="App Version"     sub="v2.4.1 · build 241"      iconCls="text-slate-400" />
+          <SettingRow icon={Smartphone} label="Device ID"  sub={deviceId} iconCls="text-slate-400" />
+          <SettingRow icon={Shield}     label="Session"    sub="Active · SSO authenticated" iconCls="text-emerald-500" />
+          <SettingRow icon={Info}       label="App Version" sub="v2.4.1 · build 241" iconCls="text-slate-400" />
         </SectionCard>
 
         {/* ── Logout ───────────────────────────────────── */}
         <button
           onClick={() => base44.auth.logout()}
-          className="w-full h-13 py-3.5 rounded-2xl border-2 border-red-200 text-red-600 font-bold text-sm flex items-center justify-center gap-2 active:bg-red-50 transition-colors"
+          className="w-full py-3.5 rounded-2xl border-2 border-red-200 text-red-600 font-bold text-sm flex items-center justify-center gap-2 active:bg-red-50 transition-colors"
         >
           <LogOut className="h-4 w-4" />
           Log Out
