@@ -18,7 +18,7 @@ import { MOCK_JOBS } from '../lib/mockJobs';
 import JobDetailOverview from '../components/field/JobDetailOverview';
 import JobActionBar from '../components/field/JobActionBar';
 import TimerPanel from '../components/field/TimerPanel';
-import RunbookView from '../components/field/RunbookView';
+import TasksTab from '../components/field/TasksTab';
 import EvidenceTab from '../components/field/EvidenceTab';
 import ChatView from '../components/field/ChatView';
 import { StatusBadge, SyncBadge } from '../components/field/StatusBadge';
