@@ -152,12 +152,41 @@ export default function Profile() {
           </div>
         </div>
 
+        {/* ── Today's active job widget ─────────────────── */}
+        {(() => {
+          const todayJob = MOCK_JOBS.find(j => ['in_progress', 'checked_in', 'paused', 'en_route'].includes(j.status));
+          if (!todayJob) return null;
+          return (
+            <Link
+              to={`/JobDetail?id=${todayJob.id}`}
+              className="block bg-slate-900 rounded-2xl p-4 active:opacity-90 transition-opacity"
+            >
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Current Assignment</p>
+              <p className="text-sm font-black text-white leading-snug line-clamp-1">{todayJob.title}</p>
+              <div className="flex items-center justify-between mt-2">
+                <p className="text-xs text-slate-400 truncate flex-1">{todayJob.company_name} · {todayJob.site_name}</p>
+                <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+                  <span className="h-2 w-2 rounded-full bg-emerald-400 motion-safe:animate-pulse" />
+                  <span className="text-[11px] text-emerald-400 font-bold capitalize">{todayJob.status.replace('_', ' ')}</span>
+                </div>
+              </div>
+              <div className="mt-3 h-1 bg-white/10 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-400 rounded-full" style={{ width: `${todayJob.progress}%` }} />
+              </div>
+              <div className="flex justify-between mt-1">
+                <span className="text-[10px] text-slate-500">Progress</span>
+                <span className="text-[10px] text-slate-400 font-bold">{todayJob.progress}%</span>
+              </div>
+            </Link>
+          );
+        })()}
+
         {/* ── Stats ────────────────────────────────────── */}
         <div>
           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-0.5">Performance · YTD</p>
           <div className="grid grid-cols-2 gap-2">
             <StatChip label="Jobs Completed"  value={profile.stats?.jobs_completed_ytd ?? 47} color="bg-white border-slate-100" />
-            <StatChip label="Avg CSAT"         value={`${profile.stats?.avg_csat ?? 4.8}/5`}   color="bg-amber-50 border-amber-100" />
+            <StatChip label="Avg CSAT"         value={`${profile.stats?.avg_csat ?? 4.8}★`}    color="bg-amber-50 border-amber-100" />
             <StatChip label="On-Time Rate"     value={`${profile.stats?.on_time_rate ?? 94}%`} color="bg-emerald-50 border-emerald-100" />
             <StatChip label="Hours This Week"  value={profile.stats?.hours_logged_week ?? 38}  color="bg-blue-50 border-blue-100" />
           </div>
