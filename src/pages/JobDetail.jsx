@@ -46,14 +46,16 @@ const ACTIVE_STATUSES = ['en_route', 'checked_in', 'in_progress', 'paused'];
 const READONLY_STATUSES = ['submitted', 'approved'];
 
 export default function JobDetail() {
-  const [activeTab, setActiveTab]   = useState('overview');
+  const urlParams   = new URLSearchParams(window.location.search);
+  const jobId       = urlParams.get('id');
+  const initTab     = urlParams.get('tab') || 'overview';
+
+  const [activeTab, setActiveTab]   = useState(initTab);
   const [geoAlerts, setGeoAlerts]   = useState([]);
   const [gpsAccuracy, setGpsAccuracy] = useState(null);
 
   const handleGeoAlert = (alertType) => setGeoAlerts(prev => prev.includes(alertType) ? prev : [...prev, alertType]);
   const handleLocationChange = (info) => { setGpsAccuracy(info?.accuracy ?? null); };
-  const urlParams = new URLSearchParams(window.location.search);
-  const jobId = urlParams.get('id');
 
   const { data: dbJob, isLoading } = useQuery({
     queryKey: ['job', jobId],
