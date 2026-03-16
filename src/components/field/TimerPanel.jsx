@@ -4,6 +4,7 @@ import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { Play, Pause, Square, Coffee, Car, Check } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { haptic } from '@/lib/haptics';
 
 // ── helpers ──────────────────────────────────────────────────────────
 function fmt(s) {
@@ -134,11 +135,16 @@ export default function TimerPanel({ jobId, statusLabel }) {
   });
 
   const fire = (type, successMsg) => {
+    // Haptic feedback per event type
+    if (type === 'work_start' || type === 'break_end' || type === 'travel_end') haptic('success');
+    else if (type === 'break_start') haptic('warning');
+    else if (type === 'travel_start') haptic('tap');
     createEntry.mutate(type);
     toast.success(successMsg, { duration: 2500 });
   };
 
   const confirmStop = () => {
+    haptic('stop');
     fire('work_stop', 'Work session ended');
     setShowStop(false);
     // Undo toast — 8s window
@@ -158,7 +164,10 @@ export default function TimerPanel({ jobId, statusLabel }) {
         {/* Status pill */}
         <div className="flex items-center justify-center mb-3">
           <div className="flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-white/70 backdrop-blur-sm">
-            <span className={cn('h-2 w-2 rounded-full flex-shrink-0', cfg.dot, activeState.state !== 'idle' && cfg.pulse && 'animate-pulse')} />
+            <span
+              className={cn('h-2 w-2 rounded-full flex-shrink-0', cfg.dot, activeState.state !== 'idle' && cfg.pulse && 'motion-safe:animate-pulse')}
+              aria-hidden="true"
+            />
             <span className={cn('text-xs font-semibold', cfg.fg)}>
               {statusLabel || cfg.label}
             </span>
