@@ -54,6 +54,7 @@ import EvidenceHub from './pages/EvidenceHub';
 import TimeLog from './pages/TimeLog';
 import Support from './pages/Support';
 import AdminQC from './pages/AdminQC';
+import Onboarding from './pages/Onboarding';
 import __Layout from './Layout.jsx';
 
 
