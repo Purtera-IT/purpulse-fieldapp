@@ -77,10 +77,10 @@ export default function JobDetailOverview({ job }) {
   const statusCfg = STATUS_CFG[job.status]     || STATUS_CFG.assigned;
   const syncCfg   = SYNC_CFG[job.sync_status]  || SYNC_CFG.synced;
   const SyncIcon  = syncCfg.Icon;
-  const progress  = job.progress ?? 0;
+  const progress  = Number(job.progress ?? 0);
   const deliv     = job.deliverables_remaining ?? 0;
   const schedule  = formatSchedule(job);
-  const PrioIcon  = prio.Icon;
+  const PrioIcon  = prio.Icon || null;
 
   return (
     <div className="space-y-3">
