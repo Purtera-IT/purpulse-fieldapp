@@ -509,10 +509,17 @@ export default function Support() {
         </div>
 
         {/* Content */}
-        {tab === 'help'    && <HelpCenter />}
+        {tab === 'help'    && <HelpCenter onOpenArtifact={setOpenArtifact} />}
         {tab === 'diag'    && <DiagnosticsSection isOnline={isOnline} syncItems={syncItems} deviceId={deviceId} queryClient={queryClient} />}
         {tab === 'contact' && <ContactSection />}
       </div>
+
+      {/* Artifact viewer sheet */}
+      <Sheet open={!!openArtifact} onOpenChange={v => !v && setOpenArtifact(null)}>
+        <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto pb-safe">
+          <ArtifactSheet artifact={openArtifact} onClose={() => setOpenArtifact(null)} />
+        </SheetContent>
+      </Sheet>
     </div>
   );
 }
