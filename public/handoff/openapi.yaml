@@ -1,0 +1,475 @@
+openapi: 3.1.0
+info:
+  title: Purpulse Field API
+  version: 1.0.0
+  description: |
+    REST API surface for the Purpulse field-technician platform.
+    All mutative endpoints REQUIRE `X-Client-Event-Id` (idempotency key).
+    Format: `evt-{timestamp-base36}-{random8}` e.g. `evt-lx3k7z-a4f9b2c1`
+    Re-sending the same key within 24h returns the original response without re-executing.
+
+servers:
+  - url: https://api.purpulse.io/v1
+    description: Production
+  - url: https://api-staging.purpulse.io/v1
+    description: Staging
+
+security:
+  - bearerAuth: []
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    ClientEventId:
+      name: X-Client-Event-Id
+      in: header
+      required: true
+      schema:
+        type: string
+        pattern: '^evt-[0-9a-z]+-[0-9a-z]{8}$'
+      description: Idempotency key. Generates once client-side; safe to retry on network failure.
+
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+
+    EvidenceId:
+      name: evidenceId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  schemas:
+    Job:
+      type: object
+      required: [id, title, status]
+      properties:
+        id:             { type: string }
+        external_id:    { type: string }
+        title:          { type: string }
+        description:    { type: string }
+        status:
+          type: string
+          enum: [assigned, en_route, checked_in, in_progress, paused, pending_closeout, submitted, approved, rejected]
+        priority:
+          type: string
+          enum: [low, medium, high, urgent]
+        scheduled_date: { type: string, format: date }
+        scheduled_time: { type: string }
+        site_name:      { type: string }
+        site_address:   { type: string }
+        site_lat:       { type: number }
+        site_lon:       { type: number }
+        contact_name:   { type: string }
+        contact_phone:  { type: string }
+        assigned_to:    { type: string, description: Technician email }
+        sync_status:
+          type: string
+          enum: [synced, pending, error]
+        created_date:   { type: string, format: date-time }
+        updated_date:   { type: string, format: date-time }
+
+    JobEvent:
+      type: object
+      required: [client_event_id, event_type, job_id, device_ts]
+      properties:
+        client_event_id:
+          type: string
+          pattern: '^evt-[0-9a-z]+-[0-9a-z]{8}$'
+        event_type:
+          type: string
+          enum: [work_start, work_stop, break_start, break_end, travel_start, travel_end, check_in, check_out]
+        job_id:         { type: string }
+        device_ts:      { type: string, format: date-time, description: Client device timestamp (ISO 8601) }
+        geo_lat:        { type: number }
+        geo_lon:        { type: number }
+        notes:          { type: string }
+        device_meta:
+          type: object
+          properties:
+            device_id:      { type: string }
+            os:             { type: string }
+            app_version:    { type: string }
+            network_type:   { type: string, enum: [wifi, cellular, offline] }
+
+    TimeEntry:
+      type: object
+      required: [id, job_id, entry_type, timestamp]
+      properties:
+        id:               { type: string }
+        job_id:           { type: string }
+        entry_type:
+          type: string
+          enum: [work_start, work_stop, break_start, break_end, travel_start, travel_end]
+        timestamp:        { type: string, format: date-time }
+        source:
+          type: string
+          enum: [app, manual, drag_edit]
+        geo_lat:          { type: number }
+        geo_lon:          { type: number }
+        notes:            { type: string }
+        locked:           { type: boolean }
+        approved_by:      { type: string }
+        approved_at:      { type: string, format: date-time }
+        client_request_id:{ type: string }
+
+    Evidence:
+      type: object
+      required: [id, job_id, evidence_type]
+      properties:
+        id:             { type: string }
+        job_id:         { type: string }
+        evidence_type:  { type: string, enum: [site_photo, before_photo, after_photo, equipment_label, signature, chat_attachment, attachment] }
+        file_url:       { type: string, format: uri }
+        thumbnail_url:  { type: string, format: uri }
+        content_type:   { type: string }
+        size_bytes:     { type: integer }
+        captured_at:    { type: string, format: date-time }
+        geo_lat:        { type: number }
+        geo_lon:        { type: number }
+        status:
+          type: string
+          enum: [pending_upload, uploading, uploaded, error, replaced]
+        quality_score:  { type: integer, minimum: 0, maximum: 100 }
+        quality_warning:{ type: string }
+        face_detected:  { type: boolean }
+        face_redacted:  { type: boolean }
+        runbook_step_id:{ type: string }
+
+    Blocker:
+      type: object
+      required: [id, job_id, blocker_type, note]
+      properties:
+        id:           { type: string }
+        job_id:       { type: string }
+        blocker_type:
+          type: string
+          enum: [access_issue, equipment_missing, safety_concern, weather, customer_unavailable, scope_change, other]
+        severity:
+          type: string
+          enum: [low, medium, high, critical]
+        note:         { type: string }
+        status:
+          type: string
+          enum: [open, acknowledged, resolved]
+
+    SyncQueue:
+      type: object
+      properties:
+        id:               { type: string }
+        entity_type:      { type: string }
+        entity_id:        { type: string }
+        action:           { type: string, enum: [create, update, delete] }
+        payload:          { type: string, description: JSON stringified }
+        client_request_id:{ type: string }
+        status:           { type: string, enum: [pending, in_progress, completed, failed] }
+        retry_count:      { type: integer }
+        max_retries:      { type: integer }
+        last_error:       { type: string }
+        next_retry_at:    { type: string, format: date-time }
+
+    Error:
+      type: object
+      required: [code, message]
+      properties:
+        code:    { type: string }
+        message: { type: string }
+        details: { type: object }
+
+paths:
+
+  # ── Jobs ────────────────────────────────────────────────────────
+  /jobs:
+    get:
+      summary: List jobs for the authenticated technician
+      operationId: listJobs
+      parameters:
+        - name: status
+          in: query
+          schema: { type: string }
+        - name: assigned_to
+          in: query
+          schema: { type: string }
+        - name: limit
+          in: query
+          schema: { type: integer, default: 100 }
+      responses:
+        '200':
+          description: Array of jobs
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Job' }
+
+  /jobs/{jobId}:
+    get:
+      summary: Get single job
+      operationId: getJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Job object
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+        '404':
+          description: Not found
+
+    patch:
+      summary: Update job status or fields
+      operationId: updateJob
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/ClientEventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                status: { type: string }
+                assigned_to: { type: string }
+      responses:
+        '200':
+          description: Updated job
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Job' }
+
+  # ── Job Events (time tracking) ───────────────────────────────────
+  /jobs/{jobId}/events:
+    post:
+      summary: Record a job lifecycle event (check-in, work start/stop, etc.)
+      operationId: createJobEvent
+      description: |
+        Idempotent — include X-Client-Event-Id. Safe to retry on 5xx or network timeout.
+        Server returns 200 (not 201) on duplicate key to signal "already processed".
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/ClientEventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/JobEvent' }
+      responses:
+        '200':
+          description: Event already processed (idempotent replay)
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeEntry' }
+        '201':
+          description: Event created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeEntry' }
+        '409':
+          description: Conflict — overlapping time entry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Error' }
+
+  # ── Time Entries ────────────────────────────────────────────────
+  /jobs/{jobId}/time-entries:
+    get:
+      summary: List time entries for a job
+      operationId: listTimeEntries
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Array of time entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/TimeEntry' }
+
+  /time-entries/{entryId}:
+    patch:
+      summary: Edit a time entry (requires override_reason)
+      operationId: updateTimeEntry
+      parameters:
+        - name: entryId
+          in: path
+          required: true
+          schema: { type: string }
+        - $ref: '#/components/parameters/ClientEventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [override_reason]
+              properties:
+                timestamp:       { type: string, format: date-time }
+                override_reason: { type: string, minLength: 10 }
+                notes:           { type: string }
+      responses:
+        '200':
+          description: Updated entry
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/TimeEntry' }
+        '403':
+          description: Entry is locked — request admin unlock
+
+  # ── Evidence ────────────────────────────────────────────────────
+  /jobs/{jobId}/evidence:
+    get:
+      summary: List evidence for a job
+      operationId: listEvidence
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      responses:
+        '200':
+          description: Array of evidence
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Evidence' }
+
+    post:
+      summary: Create evidence record (metadata only — upload file separately)
+      operationId: createEvidence
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/ClientEventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [evidence_type]
+              properties:
+                evidence_type:    { type: string }
+                file_url:         { type: string }
+                captured_at:      { type: string, format: date-time }
+                geo_lat:          { type: number }
+                geo_lon:          { type: number }
+                runbook_step_id:  { type: string }
+                notes:            { type: string }
+      responses:
+        '201':
+          description: Evidence record created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Evidence' }
+
+  /evidence/upload-url:
+    post:
+      summary: Get pre-signed upload URL for direct file upload
+      operationId: getUploadUrl
+      parameters:
+        - $ref: '#/components/parameters/ClientEventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [content_type, evidence_id]
+              properties:
+                evidence_id:  { type: string }
+                content_type: { type: string }
+                size_bytes:   { type: integer }
+      responses:
+        '200':
+          description: Pre-signed URL and headers
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  upload_url: { type: string, format: uri }
+                  expires_at: { type: string, format: date-time }
+                  headers:    { type: object }
+
+  # ── Blockers ────────────────────────────────────────────────────
+  /jobs/{jobId}/blockers:
+    post:
+      summary: Report a blocker on a job
+      operationId: createBlocker
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+        - $ref: '#/components/parameters/ClientEventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [blocker_type, note]
+              properties:
+                blocker_type: { type: string }
+                severity:     { type: string }
+                note:         { type: string }
+      responses:
+        '201':
+          description: Blocker created
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/Blocker' }
+
+  # ── Sync Queue ──────────────────────────────────────────────────
+  /sync/batch:
+    post:
+      summary: Flush offline sync queue in a single batch
+      operationId: batchSync
+      description: |
+        Submit multiple queued operations in one request.
+        Each item carries its own client_request_id for per-item idempotency.
+        Response contains per-item success/failure — partial success is possible.
+      parameters:
+        - $ref: '#/components/parameters/ClientEventId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [items]
+              properties:
+                items:
+                  type: array
+                  maxItems: 50
+                  items:
+                    type: object
+                    required: [client_request_id, entity_type, action, payload]
+                    properties:
+                      client_request_id: { type: string }
+                      entity_type:       { type: string }
+                      action:            { type: string, enum: [create, update, delete] }
+                      payload:           { type: object }
+      responses:
+        '207':
+          description: Multi-status — check each item result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  results:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        client_request_id: { type: string }
+                        status:            { type: integer }
+                        entity_id:         { type: string }
+                        error:             { type: string }

@@ -1,0 +1,170 @@
+{
+  "$schema": "https://purpulse.io/schemas/component-catalog/v1",
+  "version": "1.0.0",
+  "generated": "2026-03-16",
+  "components": [
+
+    {
+      "name": "JobCard",
+      "path": "components/field/JobCard.jsx",
+      "category": "field",
+      "description": "Swipeable job summary card. Left-swipe reveals Maps/Call actions; right-swipe reveals Start/Resume timer. Tap navigates to JobDetail.",
+      "props": [
+        { "name": "job",         "type": "Job",       "required": true,  "description": "Job entity object" },
+        { "name": "onStartTimer","type": "function",  "required": true,  "description": "(job) => void — called when user triggers start timer" },
+        { "name": "isStarting",  "type": "boolean",   "required": false, "default": false, "description": "Shows loading state on the start button" }
+      ],
+      "variants": ["default", "urgent", "active", "read-only"],
+      "accessibility": {
+        "role": "article",
+        "aria": ["aria-label on card", "aria-label on all action buttons", "keyboard: Enter=navigate, Shift+Enter=start timer"],
+        "touchTarget": "44px minimum on all interactive elements"
+      },
+      "tokens": ["color.semantic.job.*", "borderRadius.xl", "shadow.card", "motion.duration.fast"]
+    },
+
+    {
+      "name": "TimerPanel",
+      "path": "components/field/TimerPanel.jsx",
+      "category": "field",
+      "description": "Live timer display for active jobs. Shows elapsed time, current state (working/break/travel/paused). CTA buttons transition state and write TimeEntry records with client_request_id for idempotency.",
+      "props": [
+        { "name": "jobId",       "type": "string",  "required": true,  "description": "Job entity ID" },
+        { "name": "statusLabel", "type": "string",  "required": false, "description": "Human-readable status override label" }
+      ],
+      "states": ["working", "break", "travel", "paused", "idle"],
+      "accessibility": {
+        "aria": ["aria-live=polite on timer display", "aria-atomic=true", "aria-label per state"],
+        "haptics": "haptic(success) on start; haptic(stop) on pause/end"
+      },
+      "tokens": ["color.semantic.status.*", "typography.fontFamily.mono", "motion.duration.normal"]
+    },
+
+    {
+      "name": "EvidenceTile",
+      "path": "components/field/EvidenceTile.jsx",
+      "category": "field",
+      "description": "Compact evidence thumbnail with QC state overlay. Resolves display state from evidence.status + quality_score + face_detected. Exports resolveState() and QcBadge for reuse.",
+      "props": [
+        { "name": "item",     "type": "Evidence", "required": true,  "description": "Evidence entity object" },
+        { "name": "onPress",  "type": "function", "required": false, "description": "(item) => void — opens detail sheet" },
+        { "name": "size",     "type": "'sm'|'md'|'lg'", "required": false, "default": "md" }
+      ],
+      "exports": ["EvidenceTile (default)", "QcBadge", "resolveState", "QC_CFG"],
+      "qcStates": ["qc_ok", "qc_warning", "qc_failed", "processing", "uploaded", "pending_upload", "error"],
+      "accessibility": {
+        "aria": ["role=img with aria-label describing type + QC state", "aria-busy during upload"]
+      },
+      "tokens": ["color.semantic.status.*", "borderRadius.lg", "motion.duration.slow"]
+    },
+
+    {
+      "name": "CameraOverlay",
+      "path": "components/field/CameraOverlay.jsx",
+      "category": "field",
+      "description": "Full-screen camera capture modal with reticle guide, GPS location badge, tag selection, and serial-number OCR hint. Handles both native camera input and fallback file-input flow.",
+      "props": [
+        { "name": "jobId",        "type": "string",   "required": true },
+        { "name": "evidenceType", "type": "string",   "required": false, "default": "site_photo" },
+        { "name": "defaultTags",  "type": "string[]", "required": false, "default": [] },
+        { "name": "onCapture",    "type": "function", "required": true,  "description": "(file, metadata) => void" },
+        { "name": "onClose",      "type": "function", "required": true },
+        { "name": "onOpenGallery","type": "function", "required": false }
+      ],
+      "accessibility": {
+        "aria": ["role=dialog", "aria-modal=true", "aria-label='Capture evidence'", "focus trapped inside"],
+        "haptics": "haptic(shutter) on capture"
+      },
+      "tokens": ["color.base.slate.*", "zIndex.modal", "motion.duration.slow"]
+    },
+
+    {
+      "name": "StatusBadge",
+      "path": "components/field/StatusBadge.jsx",
+      "category": "field",
+      "description": "Pill badge for Job.status and SyncQueue.sync_status.",
+      "exports": ["StatusBadge", "SyncBadge"],
+      "props": [
+        { "name": "status", "type": "string", "required": true }
+      ],
+      "tokens": ["color.semantic.job.*", "borderRadius.full", "typography.fontSize.xs"]
+    },
+
+    {
+      "name": "QuickActionsBar",
+      "path": "components/field/QuickActionsBar.jsx",
+      "category": "field",
+      "description": "Horizontally scrollable row of 60×60px action buttons (Photo, Attach, Note, Safety, More). Opens bottom sheets for each action.",
+      "props": [
+        { "name": "job", "type": "Job", "required": true }
+      ],
+      "tokens": ["spacing.2", "borderRadius.2xl", "touchTarget.large"]
+    },
+
+    {
+      "name": "EvidenceCapture",
+      "path": "components/field/EvidenceCapture.jsx",
+      "category": "field",
+      "description": "Multi-step capture orchestrator: source → metadata (single) | gallery (multi) → upload queue. Manages CameraOverlay, GalleryImport, EvidenceMetadataForm, UploadQueue sub-steps.",
+      "props": [
+        { "name": "jobId",        "type": "string",   "required": true },
+        { "name": "evidenceType", "type": "string",   "required": false },
+        { "name": "stepId",       "type": "string",   "required": false, "description": "Runbook step ID to associate" },
+        { "name": "onCaptured",   "type": "function", "required": false }
+      ]
+    },
+
+    {
+      "name": "DailyTimeline",
+      "path": "components/field/DailyTimeline.jsx",
+      "category": "field",
+      "description": "Vertical pixel-mapped timeline of work/travel/break segments. Drag handles adjust start/end times. Writes TimeEntry updates with client_request_id idempotency.",
+      "exports": ["DailyTimeline (default)", "buildSegments"],
+      "props": [
+        { "name": "entries",      "type": "TimeEntry[]", "required": true },
+        { "name": "date",         "type": "Date",        "required": true },
+        { "name": "onSegmentTap", "type": "function",    "required": false, "description": "(segment) => void" }
+      ]
+    },
+
+    {
+      "name": "AdminShell",
+      "path": "components/admin/AdminShell.jsx",
+      "category": "admin",
+      "description": "Sidebar + topbar layout wrapper for all /Admin* pages. Not part of the global Layout — imported directly by each admin page.",
+      "props": [
+        { "name": "children",  "type": "ReactNode", "required": true },
+        { "name": "title",     "type": "string",    "required": true },
+        { "name": "subtitle",  "type": "string",    "required": false }
+      ]
+    },
+
+    {
+      "name": "OfflineBanner",
+      "path": "components/field/OfflineBanner.jsx",
+      "category": "field",
+      "description": "Persistent amber banner shown when navigator.onLine=false. Shows pending sync count.",
+      "props": [
+        { "name": "pendingCount", "type": "number", "required": false, "default": 0 }
+      ]
+    },
+
+    {
+      "name": "SyncIndicator",
+      "path": "components/field/SyncIndicator.jsx",
+      "category": "field",
+      "description": "Floating pill at top of screen showing online/offline state and pending/failed sync counts. role=status, aria-live=polite.",
+      "props": []
+    },
+
+    {
+      "name": "RunbookView",
+      "path": "components/field/RunbookView.jsx",
+      "category": "field",
+      "description": "Multi-phase runbook renderer. Phases are sequentially gated — a phase unlocks only when all required steps in the previous phase are complete.",
+      "props": [
+        { "name": "job", "type": "Job", "required": true }
+      ]
+    }
+  ]
+}

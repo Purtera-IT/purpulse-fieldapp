@@ -1,0 +1,167 @@
+{
+  "$schema": "https://design-tokens.github.io/community-group/format/",
+  "meta": {
+    "version": "1.0.0",
+    "generated": "2026-03-16",
+    "product": "Purpulse Field App"
+  },
+
+  "color": {
+    "base": {
+      "slate": {
+        "50":  { "$value": "#f8fafc", "$type": "color" },
+        "100": { "$value": "#f1f5f9", "$type": "color" },
+        "200": { "$value": "#e2e8f0", "$type": "color" },
+        "300": { "$value": "#cbd5e1", "$type": "color" },
+        "400": { "$value": "#94a3b8", "$type": "color" },
+        "500": { "$value": "#64748b", "$type": "color" },
+        "600": { "$value": "#475569", "$type": "color" },
+        "700": { "$value": "#334155", "$type": "color" },
+        "800": { "$value": "#1e293b", "$type": "color" },
+        "900": { "$value": "#0f172a", "$type": "color" }
+      },
+      "emerald": {
+        "50":  { "$value": "#ecfdf5", "$type": "color" },
+        "600": { "$value": "#059669", "$type": "color" },
+        "700": { "$value": "#047857", "$type": "color" }
+      },
+      "amber": {
+        "50":  { "$value": "#fffbeb", "$type": "color" },
+        "500": { "$value": "#f59e0b", "$type": "color" },
+        "600": { "$value": "#d97706", "$type": "color" },
+        "700": { "$value": "#b45309", "$type": "color" }
+      },
+      "red": {
+        "50":  { "$value": "#fef2f2", "$type": "color" },
+        "600": { "$value": "#dc2626", "$type": "color" },
+        "700": { "$value": "#b91c1c", "$type": "color" }
+      },
+      "blue": {
+        "50":  { "$value": "#eff6ff", "$type": "color" },
+        "600": { "$value": "#2563eb", "$type": "color" },
+        "700": { "$value": "#1d4ed8", "$type": "color" }
+      }
+    },
+    "semantic": {
+      "background": { "$value": "{color.base.slate.50}", "$type": "color" },
+      "surface":    { "$value": "#ffffff", "$type": "color" },
+      "border":     { "$value": "{color.base.slate.100}", "$type": "color" },
+      "text": {
+        "primary":   { "$value": "{color.base.slate.900}", "$type": "color" },
+        "secondary": { "$value": "{color.base.slate.500}", "$type": "color" },
+        "muted":     { "$value": "{color.base.slate.400}", "$type": "color" },
+        "inverse":   { "$value": "#ffffff", "$type": "color" }
+      },
+      "status": {
+        "success":  { "$value": "{color.base.emerald.700}", "$type": "color" },
+        "warning":  { "$value": "{color.base.amber.700}", "$type": "color" },
+        "error":    { "$value": "{color.base.red.700}", "$type": "color" },
+        "info":     { "$value": "{color.base.blue.700}", "$type": "color" }
+      },
+      "job": {
+        "assigned":         { "$value": "{color.base.slate.400}", "$type": "color" },
+        "en_route":         { "$value": "{color.base.blue.600}", "$type": "color" },
+        "checked_in":       { "$value": "{color.base.emerald.600}", "$type": "color" },
+        "in_progress":      { "$value": "#10b981", "$type": "color" },
+        "paused":           { "$value": "{color.base.amber.500}", "$type": "color" },
+        "pending_closeout": { "$value": "#8b5cf6", "$type": "color" },
+        "submitted":        { "$value": "{color.base.blue.600}", "$type": "color" },
+        "approved":         { "$value": "{color.base.emerald.600}", "$type": "color" },
+        "rejected":         { "$value": "{color.base.red.600}", "$type": "color" }
+      }
+    }
+  },
+
+  "typography": {
+    "fontFamily": {
+      "sans": { "$value": "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif", "$type": "fontFamily" },
+      "mono": { "$value": "'JetBrains Mono', 'Fira Code', 'Courier New', monospace", "$type": "fontFamily" }
+    },
+    "fontSize": {
+      "xs":   { "$value": "0.625rem",  "$type": "dimension", "px": 10 },
+      "sm":   { "$value": "0.75rem",   "$type": "dimension", "px": 12 },
+      "base": { "$value": "0.875rem",  "$type": "dimension", "px": 14 },
+      "md":   { "$value": "1rem",      "$type": "dimension", "px": 16 },
+      "lg":   { "$value": "1.125rem",  "$type": "dimension", "px": 18 },
+      "xl":   { "$value": "1.25rem",   "$type": "dimension", "px": 20 },
+      "2xl":  { "$value": "1.5rem",    "$type": "dimension", "px": 24 },
+      "3xl":  { "$value": "2rem",      "$type": "dimension", "px": 32 }
+    },
+    "fontWeight": {
+      "normal":    { "$value": 400, "$type": "fontWeight" },
+      "medium":    { "$value": 500, "$type": "fontWeight" },
+      "semibold":  { "$value": 600, "$type": "fontWeight" },
+      "bold":      { "$value": 700, "$type": "fontWeight" },
+      "extrabold": { "$value": 800, "$type": "fontWeight" },
+      "black":     { "$value": 900, "$type": "fontWeight" }
+    },
+    "lineHeight": {
+      "tight":  { "$value": 1.25, "$type": "number" },
+      "snug":   { "$value": 1.375, "$type": "number" },
+      "normal": { "$value": 1.5, "$type": "number" },
+      "relaxed":{ "$value": 1.625, "$type": "number" }
+    }
+  },
+
+  "spacing": {
+    "0":  { "$value": "0px",    "$type": "dimension" },
+    "1":  { "$value": "4px",    "$type": "dimension" },
+    "2":  { "$value": "8px",    "$type": "dimension" },
+    "3":  { "$value": "12px",   "$type": "dimension" },
+    "4":  { "$value": "16px",   "$type": "dimension" },
+    "5":  { "$value": "20px",   "$type": "dimension" },
+    "6":  { "$value": "24px",   "$type": "dimension" },
+    "8":  { "$value": "32px",   "$type": "dimension" },
+    "10": { "$value": "40px",   "$type": "dimension" },
+    "12": { "$value": "48px",   "$type": "dimension" },
+    "16": { "$value": "64px",   "$type": "dimension" }
+  },
+
+  "borderRadius": {
+    "sm":   { "$value": "8px",   "$type": "dimension" },
+    "md":   { "$value": "12px",  "$type": "dimension" },
+    "lg":   { "$value": "16px",  "$type": "dimension" },
+    "xl":   { "$value": "20px",  "$type": "dimension" },
+    "2xl":  { "$value": "24px",  "$type": "dimension" },
+    "full": { "$value": "9999px","$type": "dimension" }
+  },
+
+  "shadow": {
+    "sm":  { "$value": "0 1px 2px rgba(0,0,0,0.05)", "$type": "shadow" },
+    "md":  { "$value": "0 4px 6px rgba(0,0,0,0.07), 0 1px 3px rgba(0,0,0,0.06)", "$type": "shadow" },
+    "lg":  { "$value": "0 10px 15px rgba(0,0,0,0.10), 0 4px 6px rgba(0,0,0,0.05)", "$type": "shadow" },
+    "xl":  { "$value": "0 20px 25px rgba(0,0,0,0.10), 0 10px 10px rgba(0,0,0,0.04)", "$type": "shadow" },
+    "card":{ "$value": "0 2px 12px rgba(0,0,0,0.06)", "$type": "shadow" }
+  },
+
+  "motion": {
+    "duration": {
+      "instant": { "$value": "0ms",   "$type": "duration" },
+      "fast":    { "$value": "100ms", "$type": "duration" },
+      "normal":  { "$value": "200ms", "$type": "duration" },
+      "slow":    { "$value": "300ms", "$type": "duration" },
+      "slower":  { "$value": "500ms", "$type": "duration" }
+    },
+    "easing": {
+      "default":    { "$value": "cubic-bezier(0.4, 0, 0.2, 1)", "$type": "cubicBezier" },
+      "in":         { "$value": "cubic-bezier(0.4, 0, 1, 1)",   "$type": "cubicBezier" },
+      "out":        { "$value": "cubic-bezier(0, 0, 0.2, 1)",   "$type": "cubicBezier" },
+      "spring":     { "$value": "cubic-bezier(0.34, 1.56, 0.64, 1)", "$type": "cubicBezier" }
+    }
+  },
+
+  "touchTarget": {
+    "minimum":     { "$value": "44px", "$type": "dimension", "note": "WCAG 2.5.5 minimum touch target" },
+    "comfortable": { "$value": "48px", "$type": "dimension" },
+    "large":       { "$value": "56px", "$type": "dimension" }
+  },
+
+  "zIndex": {
+    "base":    { "$value": 0,   "$type": "number" },
+    "raised":  { "$value": 10,  "$type": "number" },
+    "sticky":  { "$value": 20,  "$type": "number" },
+    "overlay": { "$value": 30,  "$type": "number" },
+    "modal":   { "$value": 40,  "$type": "number" },
+    "toast":   { "$value": 50,  "$type": "number" }
+  }
+}
