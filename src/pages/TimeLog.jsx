@@ -177,6 +177,19 @@ export default function TimeLog() {
     return null;
   }, [locationInfo, activeState, date]);
 
+  const handleGeoAlert = (alertType) => {
+    setGeoAlerts(prev => prev.includes(alertType) ? prev : [...prev, alertType]);
+  };
+
+  const handleLocationChange = (info) => {
+    setLocationInfo(info);
+    setGpsAccuracy(info?.accuracy ?? null);
+    // Detect off-site while working
+    if (info?.state === 'off_site' && activeState === 'working') {
+      handleGeoAlert('off_site_while_working');
+    }
+  };
+
   const handleTimerAction = (type) => {
     const entry = {
       entry_type: type,
