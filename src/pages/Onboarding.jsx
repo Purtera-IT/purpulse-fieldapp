@@ -28,12 +28,13 @@ import { createPageUrl } from '@/utils';
 import { ShieldCheck, Building2, CheckCircle2, ChevronRight } from 'lucide-react';
 import DeviceRegistration from '../components/onboarding/DeviceRegistration';
 import PermissionsSetup from '../components/onboarding/PermissionsSetup';
+import LocationConsentStep from '../components/onboarding/LocationConsentStep';
 import RolesScreen from '../components/onboarding/RolesScreen';
 import TutorialSlides from '../components/onboarding/TutorialSlides';
 
 const ONBOARDING_KEY = 'purpulse_onboarded';
-const STEPS = ['welcome', 'device', 'permissions', 'role', 'tutorial'];
-const STEP_LABELS = ['Welcome', 'Device', 'Permissions', 'Role', 'Tutorial'];
+const STEPS = ['welcome', 'device', 'permissions', 'location', 'role', 'tutorial'];
+const STEP_LABELS = ['Welcome', 'Device', 'Permissions', 'Location', 'Role', 'Tutorial'];
 
 function ProgressBar({ step }) {
   const pct = ((step) / (STEPS.length - 1)) * 100;
