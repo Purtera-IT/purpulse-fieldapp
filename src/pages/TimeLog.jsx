@@ -266,6 +266,17 @@ export default function TimeLog() {
           )}
         </div>
 
+        {/* ── Geofence alerts ──────────────────────── */}
+        {geoAlerts.length > 0 && (
+          <GeofenceAlerts
+            alerts={geoAlerts}
+            accuracy={gpsAccuracy}
+            onCtaAction={(action) => {
+              if (action === 'manual_checkin') handleTimerAction('work_start');
+            }}
+          />
+        )}
+
         {/* ── Geofence suggestion banner ────────────── */}
         {geoSuggestion && (
           <div className={cn(
