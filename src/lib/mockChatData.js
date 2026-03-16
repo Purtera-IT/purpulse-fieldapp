@@ -39,7 +39,7 @@ export const MOCK_AI_MESSAGES = [
   },
   {
     id: 'ai-5', role: 'assistant',
-    content: "That's a scope change situation. Here's what to do:\n\n1. **Document it now** — take a photo of the gap with a tape measure visible\n2. **Log a blocker** in the Tasks tab with type "scope_change"\n3. **Notify your PM** — this typically requires a field change order\n\nDo you want me to draft the escalation message to your PM automatically?",
+    content: "That's a scope change situation. Here's what to do:\n\n1. **Document it now** — take a photo of the gap with a tape measure visible\n2. **Log a blocker** in the Tasks tab with type 'scope_change'\n3. **Notify your PM** — this typically requires a field change order\n\nDo you want me to draft the escalation message to your PM automatically?",
     sent_at: ago(1),
   },
 ];
