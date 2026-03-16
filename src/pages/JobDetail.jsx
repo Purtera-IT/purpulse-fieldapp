@@ -95,31 +95,57 @@ export default function JobDetail() {
     <div className="min-h-screen bg-slate-50 flex flex-col">
 
       {/* ── Sticky header ─────────────────────────────────── */}
-      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl border-b border-slate-100">
-        <div className="max-w-lg mx-auto px-4 py-3">
-          <div className="flex items-center gap-3">
+      <div className="sticky top-0 z-30 bg-white/95 backdrop-blur-xl border-b border-slate-100 shadow-sm">
+        <div className="max-w-lg mx-auto px-4 pt-3 pb-0">
+          <div className="flex items-center gap-3 mb-2">
             <Link
               to="/Jobs"
-              className="h-9 w-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 active:bg-slate-200"
+              className="h-9 w-9 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 active:bg-slate-200 transition-colors"
               aria-label="Back to jobs"
             >
               <ArrowLeft className="h-4 w-4 text-slate-600" />
             </Link>
             <div className="flex-1 min-w-0">
               <h1 className="text-[15px] font-black text-slate-900 leading-snug line-clamp-1">{job.title}</h1>
-              <div className="flex items-center gap-2 mt-0.5">
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <StatusBadge status={job.status} />
                 <SyncBadge  status={job.sync_status} />
+                {job.company_name && (
+                  <span className="text-[10px] text-slate-400 font-semibold truncate max-w-[100px]">{job.company_name}</span>
+                )}
                 {!dbJob && (
                   <span className="text-[9px] font-black text-slate-300 bg-slate-50 px-1.5 py-0.5 rounded border border-slate-100">DEMO</span>
                 )}
               </div>
             </div>
+
+            {/* Quick-tap action: go to tasks */}
+            {isActive && (
+              <button
+                onClick={() => setActiveTab('tasks')}
+                className="flex-shrink-0 h-9 px-3 rounded-xl bg-slate-900 text-white text-[11px] font-bold flex items-center gap-1.5 active:opacity-80"
+              >
+                <ClipboardList className="h-3.5 w-3.5" />
+                Tasks
+              </button>
+            )}
           </div>
+
+          {/* Progress bar under title */}
+          {job.progress != null && (
+            <div className="h-1 bg-slate-100 rounded-full overflow-hidden mb-0">
+              <div
+                className={cn('h-full rounded-full transition-all',
+                  job.progress === 100 ? 'bg-emerald-500' : job.progress >= 60 ? 'bg-blue-500' : job.progress >= 30 ? 'bg-amber-400' : 'bg-red-400'
+                )}
+                style={{ width: `${job.progress}%` }}
+              />
+            </div>
+          )}
         </div>
 
         {/* Tabs */}
-        <div className="flex border-t border-slate-50 max-w-lg mx-auto">
+        <div className="flex max-w-lg mx-auto px-1 mt-0">
           {TABS.map(tab => {
             const Icon = tab.Icon;
             const active = activeTab === tab.id;
@@ -128,10 +154,10 @@ export default function JobDetail() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'flex-1 flex flex-col items-center justify-center gap-0.5 py-2 transition-all text-[10px] font-bold border-b-2',
+                  'flex-1 flex flex-col items-center justify-center gap-0.5 py-2.5 transition-all text-[10px] font-bold border-b-2',
                   active
                     ? 'text-slate-900 border-slate-900'
-                    : 'text-slate-400 border-transparent'
+                    : 'text-slate-400 border-transparent hover:text-slate-600'
                 )}
               >
                 <Icon className="h-3.5 w-3.5" />
