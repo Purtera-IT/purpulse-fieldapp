@@ -65,7 +65,7 @@ const FIELD_ARTIFACTS = [
   { name: 'Field Incident Report',     type: 'PDF', size: '56 KB',  tag: 'Form'   },
 ];
 
-function HelpCenter() {
+function HelpCenter({ onOpenArtifact }) {
   const [openFaq, setOpenFaq] = useState(null);
   const [search, setSearch]   = useState('');
 
