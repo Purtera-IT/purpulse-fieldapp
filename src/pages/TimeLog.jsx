@@ -258,7 +258,7 @@ export default function TimeLog() {
 
         {/* ── Location badge ───────────────────────── */}
         <div className="flex items-center gap-2 flex-wrap">
-          <LocationBadge jobs={allJobs} onStatusChange={setLocationInfo} />
+          <LocationBadge jobs={allJobs} onStatusChange={handleLocationChange} onAlert={handleGeoAlert} />
           {locationInfo?.state === 'on_site' && (
             <span className="text-[11px] text-emerald-700 font-semibold">
               · GPS confirmed on-site
