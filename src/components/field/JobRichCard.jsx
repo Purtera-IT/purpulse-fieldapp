@@ -233,17 +233,28 @@ export default function JobRichCard({ job }) {
       </div>
 
       {/* ── CTA ───────────────────────────────────────────── */}
-      <div className="px-4 pb-4">
+      <div className="px-4 pb-4 flex gap-2">
         <Link
           to={`/JobDetail?id=${job.id}`}
           className={cn(
-            'flex items-center justify-center gap-2 w-full h-12 rounded-xl font-bold text-sm active:opacity-80 transition-opacity',
+            'flex items-center justify-center gap-2 flex-1 h-12 rounded-xl font-bold text-sm active:opacity-80 transition-opacity',
             getCtaBg(job.status)
           )}
         >
           {getCtaLabel(job.status)}
           <ChevronRight className="h-4 w-4" />
         </Link>
+        {/* Quick-jump to Tasks for active jobs */}
+        {['in_progress', 'checked_in', 'paused'].includes(job.status) && (
+          <Link
+            to={`/JobDetail?id=${job.id}&tab=tasks`}
+            className="h-12 w-12 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0 active:bg-slate-200 transition-colors"
+            aria-label="Go to tasks"
+            title="Jump to Tasks"
+          >
+            <ClipboardList className="h-4 w-4 text-slate-600" />
+          </Link>
+        )}
       </div>
     </div>
   );
