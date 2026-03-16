@@ -72,6 +72,11 @@ export const PAGES = {
     "Support": Support,
     "AdminQC": AdminQC,
     "Onboarding": Onboarding,
+    "AdminJobs": AdminJobs,
+    "AdminSnapshot": AdminSnapshot,
+    "AdminAuditLog": AdminAuditLog,
+    "AdminUsers": AdminUsers,
+    "AdminDevices": AdminDevices,
 }
 
 export const pagesConfig = {
