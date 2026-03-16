@@ -157,6 +157,17 @@ export default function TimerPanel({ jobId, statusLabel, compact = false }) {
     });
   };
 
+  // ── Compact inline mode (used in JobDetail sticky strip) ─────────────
+  if (compact) {
+    return (
+      <div className="flex items-center gap-2 flex-1">
+        <span className={cn('h-2 w-2 rounded-full flex-shrink-0', cfg.dot, activeState.state !== 'idle' && 'motion-safe:animate-pulse')} />
+        <span className="text-xs font-bold text-white opacity-90">{statusLabel || cfg.label}</span>
+        <span className="font-mono font-black text-sm tabular-nums text-white ml-1">{fmt(elapsed)}</span>
+      </div>
+    );
+  }
+
   return (
     <>
       <div className={cn('rounded-3xl p-5 transition-colors duration-300', cfg.bg)}>
