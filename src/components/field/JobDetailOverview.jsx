@@ -7,7 +7,7 @@ import React from 'react';
 import {
   MapPin, Navigation, Phone, Mail, Clock, User, Building2,
   ShieldAlert, KeyRound, Cloud, RefreshCw, CloudOff, Zap,
-  AlertTriangle, CheckCircle2, Package, Wifi, WifiOff,
+  AlertTriangle, CheckCircle2, Package, ClipboardList,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, parseISO, isToday, isTomorrow } from 'date-fns';
