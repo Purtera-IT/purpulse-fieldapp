@@ -155,9 +155,7 @@ export default function JobDetail() {
         )}
 
         {activeTab === 'tasks' && (
-          <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-            <RunbookView job={job} />
-          </div>
+          <TasksTab job={job} />
         )}
 
         {activeTab === 'time' && (
