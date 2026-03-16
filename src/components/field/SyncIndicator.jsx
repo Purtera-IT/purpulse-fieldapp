@@ -33,10 +33,15 @@ export default function SyncIndicator() {
   const pendingCount = pendingItems.length;
   const failedCount = failedItems.length;
 
+  // Wrap in role="status" + aria-live so screen readers announce changes
+  // aria-atomic="true" so the whole label is read, not just the diff
   if (!isOnline) {
     return (
-      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-600 text-xs font-medium">
-        <WifiOff className="h-3 w-3" />
+      <div role="status" aria-live="polite" aria-atomic="true"
+        aria-label="Sync status: offline — no internet connection"
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-red-50 text-red-700 text-xs font-medium"
+      >
+        <WifiOff className="h-3 w-3" aria-hidden="true" />
         Offline
       </div>
     );
@@ -44,8 +49,11 @@ export default function SyncIndicator() {
 
   if (failedCount > 0) {
     return (
-      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-600 text-xs font-medium">
-        <AlertTriangle className="h-3 w-3" />
+      <div role="status" aria-live="polite" aria-atomic="true"
+        aria-label={`Sync status: ${failedCount} item${failedCount !== 1 ? 's' : ''} failed to sync`}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 text-xs font-medium"
+      >
+        <AlertTriangle className="h-3 w-3" aria-hidden="true" />
         {failedCount} failed
       </div>
     );
@@ -53,16 +61,22 @@ export default function SyncIndicator() {
 
   if (pendingCount > 0) {
     return (
-      <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-600 text-xs font-medium">
-        <RefreshCw className="h-3 w-3 animate-spin" />
+      <div role="status" aria-live="polite" aria-atomic="true"
+        aria-label={`Sync status: syncing ${pendingCount} item${pendingCount !== 1 ? 's' : ''}`}
+        className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-xs font-medium"
+      >
+        <RefreshCw className="h-3 w-3 motion-safe:animate-spin" aria-hidden="true" />
         Syncing {pendingCount}
       </div>
     );
   }
 
   return (
-    <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-600 text-xs font-medium">
-      <Check className="h-3 w-3" />
+    <div role="status" aria-live="polite" aria-atomic="true"
+      aria-label="Sync status: all items synced"
+      className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 text-xs font-medium"
+    >
+      <Check className="h-3 w-3" aria-hidden="true" />
       Synced
     </div>
   );

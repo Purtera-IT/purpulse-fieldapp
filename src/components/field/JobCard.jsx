@@ -62,8 +62,23 @@ export default function JobCard({ job, onStartTimer, isStarting }) {
   const rightOpacity = offsetX < -20 ? Math.min(1, (-offsetX - 20) / 60) : 0; // left swipe → right zone (start)
   const leftOpacity  = offsetX >  20 ? Math.min(1, (offsetX  - 20) / 60) : 0; // right swipe → left zone (nav/call)
 
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      navigate(createPageUrl('JobDetail') + `?id=${job.id}`);
+    } else if (e.key === 'Enter' && e.shiftKey && (canStart || isPaused)) {
+      onStartTimer?.(job);
+    }
+  };
+
   return (
-    <div className="relative overflow-hidden rounded-2xl" style={{ touchAction: 'pan-y' }}>
+    <div
+      className="relative overflow-hidden rounded-2xl"
+      style={{ touchAction: 'pan-y' }}
+      role="article"
+      aria-label={`${job.title}. Status: ${job.status?.replace(/_/g, ' ')}. Priority: ${job.priority || 'medium'}.`}
+      tabIndex={0}
+      onKeyDown={handleKeyDown}
+    >
 
       {/* ── Left zone (right swipe): Navigate + Call ─────────────── */}
       <div
@@ -73,17 +88,19 @@ export default function JobCard({ job, onStartTimer, isStarting }) {
         <button
           onClick={() => job.site_address && window.open(`https://maps.google.com/maps?q=${encodeURIComponent(job.site_address)}`, '_blank')}
           className="flex flex-col items-center justify-center gap-1 bg-blue-500 px-5 h-full min-w-[72px]"
+          aria-label={`Navigate to ${job.site_address || 'job site'} in maps`}
         >
-          <Navigation className="h-5 w-5 text-white" />
-          <span className="text-white text-[10px] font-bold uppercase">Maps</span>
+          <Navigation className="h-5 w-5 text-white" aria-hidden="true" />
+          <span className="text-white text-[10px] font-bold uppercase" aria-hidden="true">Maps</span>
         </button>
         {job.contact_phone && (
           <a
             href={`tel:${job.contact_phone}`}
             className="flex flex-col items-center justify-center gap-1 bg-slate-700 px-5 h-full min-w-[72px]"
+            aria-label={`Call ${job.contact_name || job.contact_phone}`}
           >
-            <Phone className="h-5 w-5 text-white" />
-            <span className="text-white text-[10px] font-bold uppercase">Call</span>
+            <Phone className="h-5 w-5 text-white" aria-hidden="true" />
+            <span className="text-white text-[10px] font-bold uppercase" aria-hidden="true">Call</span>
           </a>
         )}
       </div>
@@ -96,9 +113,10 @@ export default function JobCard({ job, onStartTimer, isStarting }) {
         <button
           onClick={() => onStartTimer?.(job)}
           className="flex flex-col items-center gap-1"
+          aria-label={`${canStart ? 'Start timer for' : 'Resume'} ${job.title}`}
         >
-          <Play className="h-5 w-5 text-white" />
-          <span className="text-white text-[10px] font-bold uppercase">
+          <Play className="h-5 w-5 text-white" aria-hidden="true" />
+          <span className="text-white text-[10px] font-bold uppercase" aria-hidden="true">
             {canStart ? 'Start' : 'Resume'}
           </span>
         </button>
@@ -184,17 +202,21 @@ export default function JobCard({ job, onStartTimer, isStarting }) {
                 onTouchEnd={(e) => { e.stopPropagation(); onStartTimer?.(job); }}
                 onClick={(e) => { e.preventDefault(); e.stopPropagation(); onStartTimer?.(job); }}
                 className="flex-1 h-11 rounded-xl bg-slate-900 text-white text-xs font-bold flex items-center justify-center gap-2 active:opacity-80 transition-opacity"
+                aria-label={`Check in and start timer for ${job.title}`}
+                aria-busy={isStarting}
               >
                 {isStarting
-                  ? <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                  : <Play className="h-3.5 w-3.5" />
+                  ? <span className="h-4 w-4 border-2 border-white/30 border-t-white rounded-full motion-safe:animate-spin" aria-hidden="true" />
+                  : <Play className="h-3.5 w-3.5" aria-hidden="true" />
                 }
                 Check In & Start
               </button>
             )}
             {isActive && (
-              <div className="flex-1 h-11 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold flex items-center justify-center gap-2">
-                <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+              <div className="flex-1 h-11 rounded-xl bg-emerald-50 text-emerald-700 text-xs font-bold flex items-center justify-center gap-2"
+                aria-label="Job is in progress"
+              >
+                <span className="h-2 w-2 rounded-full bg-emerald-500 motion-safe:animate-pulse" aria-hidden="true" />
                 In Progress
               </div>
             )}
