@@ -2,21 +2,15 @@ import React, { useState } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { format } from 'date-fns';
-import { Trash2, RefreshCw, AlertTriangle, CheckCircle2, Clock, X } from 'lucide-react';
-import { Button } from '@/components/ui/button';
+import { Trash2, AlertTriangle, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-
-const STATUS_ICON = {
-  pending_upload: Clock,
-  uploading: RefreshCw,
-  uploaded: CheckCircle2,
-  error: AlertTriangle,
-  replaced: X,
-};
+import EvidenceTile from './EvidenceTile';
+import EvidenceDetailSheet from './EvidenceDetailSheet';
+import { Sheet, SheetContent } from '@/components/ui/sheet';
 
 export default function EvidenceGallery({ items, jobId }) {
-  const [lightbox, setLightbox] = useState(null);
+  const [detailItem, setDetailItem] = useState(null);
   const queryClient = useQueryClient();
 
   const deleteMutation = useMutation({
@@ -38,73 +32,19 @@ export default function EvidenceGallery({ items, jobId }) {
   return (
     <>
       <div className="grid grid-cols-3 gap-2">
-        {items.filter(i => i.status !== 'replaced').map((item) => {
-          const Icon = STATUS_ICON[item.status] || CheckCircle2;
-          return (
-            <div key={item.id} className="relative group">
-              <button
-                onClick={() => setLightbox(item)}
-                className="w-full aspect-square rounded-xl overflow-hidden bg-slate-100"
-              >
-                <img
-                  src={item.file_url || item.thumbnail_url}
-                  alt={item.evidence_type}
-                  className="w-full h-full object-cover"
-                />
-                {item.quality_warning && (
-                  <div className="absolute top-1 left-1 bg-amber-500 text-white rounded-full p-0.5">
-                    <AlertTriangle className="h-3 w-3" />
-                  </div>
-                )}
-                <div className={cn(
-                  'absolute bottom-1 right-1 rounded-full p-0.5',
-                  item.status === 'uploaded' ? 'bg-emerald-500' :
-                  item.status === 'error' ? 'bg-red-500' :
-                  'bg-amber-500'
-                )}>
-                  <Icon className={cn('h-3 w-3 text-white', item.status === 'uploading' && 'animate-spin')} />
-                </div>
-              </button>
-              {item.status !== 'uploaded' && (
-                <button
-                  onClick={() => deleteMutation.mutate(item.id)}
-                  className="absolute top-1 right-1 bg-red-500 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity"
-                >
-                  <Trash2 className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          );
-        })}
+        {items.filter(i => i.status !== 'replaced').map((item) => (
+          <EvidenceTile key={item.id} item={item} size={96} onTap={setDetailItem} />
+        ))}
       </div>
 
-      {lightbox && (
-        <div className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
-          <button className="absolute top-4 right-4 text-white p-2" onClick={() => setLightbox(null)}>
-            <X className="h-6 w-6" />
-          </button>
-          <img
-            src={lightbox.file_url}
-            alt={lightbox.evidence_type}
-            className="max-w-full max-h-[80vh] rounded-lg object-contain"
-            onClick={(e) => e.stopPropagation()}
-          />
-          <div className="absolute bottom-6 left-0 right-0 text-center text-white text-sm">
-            <p className="font-medium capitalize">{lightbox.evidence_type?.replace(/_/g, ' ')}</p>
-            {lightbox.captured_at && (
-              <p className="text-white/60 text-xs mt-1">
-                {format(new Date(lightbox.captured_at), 'MMM d, yyyy h:mm a')}
-              </p>
-            )}
-            {lightbox.quality_warning && (
-              <p className="text-amber-400 text-xs mt-1 flex items-center justify-center gap-1">
-                <AlertTriangle className="h-3 w-3" />
-                {lightbox.quality_warning}
-              </p>
-            )}
-          </div>
-        </div>
-      )}
+      <Sheet open={!!detailItem} onOpenChange={v => !v && setDetailItem(null)}>
+        <SheetContent side="bottom" className="rounded-t-3xl max-h-[90vh] overflow-y-auto pb-10">
+          <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mt-3 mb-5" />
+          {detailItem && (
+            <EvidenceDetailSheet item={detailItem} onClose={() => setDetailItem(null)} />
+          )}
+        </SheetContent>
+      </Sheet>
     </>
   );
 }
