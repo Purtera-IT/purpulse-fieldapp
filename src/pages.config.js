@@ -66,6 +66,7 @@ export const PAGES = {
     "TimeLog": TimeLog,
     "Support": Support,
     "AdminQC": AdminQC,
+    "Onboarding": Onboarding,
 }
 
 export const pagesConfig = {
