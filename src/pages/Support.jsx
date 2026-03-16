@@ -360,9 +360,84 @@ function getOrCreateDeviceId() {
   return id;
 }
 
+// ── Artifact viewer sheet ────────────────────────────────────────────
+const ARTIFACT_CONTENT = {
+  'Safety Pre-Work Checklist': {
+    sections: [
+      { title: 'Personal Protective Equipment', items: ['Hard hat worn', 'Safety glasses on', 'Hi-vis vest on', 'Steel-toe boots', 'Gloves if handling sharp edges'] },
+      { title: 'Site Hazard Assessment', items: ['Identify electrical hazards', 'Confirm LOTO applied if required', 'Check fall hazard zones', 'Verify confined-space status', 'Weather conditions acceptable'] },
+      { title: 'Tool & Equipment Check', items: ['Inspect all tools before use', 'Check torque wrench calibration', 'Verify ladders rated for load', 'Confirm fall arrest gear certified', 'First-aid kit accessible'] },
+    ]
+  },
+  'Tower Install SOP v3.2': {
+    sections: [
+      { title: 'Phase 1 — Pre-Installation', items: ['Confirm site survey complete', 'Verify permits on-site', 'Perform ground resistance test (< 5 Ω)', 'Mark underground utilities'] },
+      { title: 'Phase 2 — Foundation', items: ['Excavate to spec depth', 'Set anchor bolts per drawing', 'Pour concrete to spec (3000 PSI min)', 'Cure 72 hours before erection'] },
+      { title: 'Phase 3 — Erection', items: ['Inspect all sections before lifting', 'Torque all bolts per spec table', 'Verify plumb ± 0.1° per section', 'Install climbing pegs at 18" intervals'] },
+    ]
+  },
+};
+
+function ArtifactSheet({ artifact, onClose }) {
+  const content = ARTIFACT_CONTENT[artifact?.name];
+  return (
+    <div className="p-4 pb-8">
+      <div className="w-10 h-1 bg-slate-200 rounded-full mx-auto mb-5" />
+      <div className="flex items-center justify-between mb-4">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-xl bg-emerald-50 flex items-center justify-center flex-shrink-0">
+            <FileText className="h-5 w-5 text-emerald-600" />
+          </div>
+          <div>
+            <h3 className="text-base font-black text-slate-900">{artifact?.name}</h3>
+            <p className="text-[11px] text-slate-400">{artifact?.type} · {artifact?.size} · {artifact?.tag}</p>
+          </div>
+        </div>
+        <button onClick={onClose} className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
+          <X className="h-4 w-4 text-slate-500" />
+        </button>
+      </div>
+
+      {content ? (
+        <div className="space-y-4">
+          {content.sections.map((sec, i) => (
+            <div key={i}>
+              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">{sec.title}</p>
+              <div className="space-y-1.5">
+                {sec.items.map((item, j) => (
+                  <div key={j} className="flex items-center gap-2.5 px-3 py-2.5 bg-white rounded-xl border border-slate-100">
+                    <div className="h-5 w-5 rounded-full border-2 border-slate-200 flex items-center justify-center flex-shrink-0">
+                      <div className="h-2.5 w-2.5 rounded-full bg-slate-100" />
+                    </div>
+                    <span className="text-sm text-slate-700 font-medium">{item}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-10 text-slate-400">
+          <FileText className="h-12 w-12 mx-auto mb-3 opacity-30" />
+          <p className="text-sm font-semibold">Document preview unavailable</p>
+          <p className="text-xs mt-1">Tap Download to open in your PDF viewer</p>
+        </div>
+      )}
+
+      <button
+        onClick={() => { toast.success(`Downloading ${artifact?.name}…`); onClose(); }}
+        className="w-full h-12 rounded-2xl bg-slate-900 text-white font-bold text-sm mt-5 flex items-center justify-center gap-2"
+      >
+        <Download className="h-4 w-4" /> Download PDF
+      </button>
+    </div>
+  );
+}
+
 export default function Support() {
   const [tab, setTab] = useState('help');
   const [isOnline, setIsOnline] = useState(navigator.onLine);
+  const [openArtifact, setOpenArtifact] = useState(null);
   const deviceId = getOrCreateDeviceId();
   const queryClient = useQueryClient();
 
