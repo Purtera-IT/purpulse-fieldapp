@@ -50,9 +50,8 @@ export default function Layout({ children, currentPageName }) {
 
       {/* Bottom Tab Bar */}
       {showNav && (
-        <div className="fixed bottom-0 left-0 right-0 z-30 bg-white/80 backdrop-blur-xl border-t border-slate-100">
-          <nav aria-label="Primary navigation">
-        <div className="max-w-lg mx-auto flex">
+        <nav aria-label="Primary navigation" className="fixed bottom-0 left-0 right-0 z-30 bg-white/80 backdrop-blur-xl border-t border-slate-100">
+          <div className="max-w-lg mx-auto flex">
             {NAV_ITEMS.map(item => {
               const Icon = item.icon;
               const isActive = currentPageName === item.page;
@@ -80,7 +79,6 @@ export default function Layout({ children, currentPageName }) {
           </div>
           {/* Safe area padding for iOS */}
           <div className="h-[env(safe-area-inset-bottom)]" />
-        </div>
         </nav>
       )}
     </div>
