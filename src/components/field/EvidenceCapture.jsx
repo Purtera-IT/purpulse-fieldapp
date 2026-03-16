@@ -12,6 +12,7 @@ import { useUploadQueue } from '@/hooks/useUploadQueue';
 import EvidenceMetadataForm from './EvidenceMetadataForm';
 import GalleryImport from './GalleryImport';
 import UploadQueue from './UploadQueue';
+import CameraOverlay from './CameraOverlay';
 import { cn } from '@/lib/utils';
 
 // steps: 'source' | 'metadata' | 'gallery' | 'queue'
@@ -20,6 +21,7 @@ export default function EvidenceCapture({ jobId, evidenceType, stepId, onCapture
   const [step, setStep]           = useState('source');
   const [capturedFile, setCapturedFile] = useState(null);
   const [capturedPreview, setCapturedPreview] = useState(null);
+  const [showOverlay, setShowOverlay] = useState(false);
   const cameraInputRef = useRef(null);
   const queryClient = useQueryClient();
 
@@ -63,20 +65,38 @@ export default function EvidenceCapture({ jobId, evidenceType, stepId, onCapture
     setStep('queue');
   };
 
+  // ── Overlay capture handler ─────────────────────────────────────
+  const handleOverlayCapture = (file, metadata) => {
+    setShowOverlay(false);
+    addToQueue([file], { ...metadata, runbook_step_id: stepId || null }, jobId, onCaptured);
+    setStep('queue');
+  };
+
   // ── Source selection screen ──────────────────────────────────────
   if (step === 'source') {
     return (
+      <>
+      {showOverlay && (
+        <CameraOverlay
+          jobId={jobId}
+          evidenceType={evidenceType}
+          defaultTags={evidenceType ? [evidenceType.charAt(0).toUpperCase() + evidenceType.slice(1)] : []}
+          onCapture={handleOverlayCapture}
+          onClose={() => setShowOverlay(false)}
+          onOpenGallery={() => { setShowOverlay(false); setStep('gallery'); }}
+        />
+      )}
       <div className="space-y-3">
-        {/* Camera — primary action */}
+        {/* Camera — primary action (full overlay) */}
         <button
-          onClick={() => cameraInputRef.current?.click()}
+          onClick={() => setShowOverlay(true)}
           className="w-full h-20 rounded-2xl bg-slate-900 text-white flex items-center justify-center gap-3 active:opacity-80"
-          aria-label="Open camera"
+          aria-label="Open camera overlay"
         >
           <Camera className="h-6 w-6" />
           <div className="text-left">
             <p className="font-bold text-sm">Camera</p>
-            <p className="text-xs text-white/60">One photo with metadata</p>
+            <p className="text-xs text-white/60">Reticle · GPS · Tags · Serial guide</p>
           </div>
         </button>
 
@@ -119,6 +139,7 @@ export default function EvidenceCapture({ jobId, evidenceType, stepId, onCapture
           </button>
         )}
       </div>
+      </>
     );
   }
 
