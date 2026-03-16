@@ -78,6 +78,7 @@ export const PAGES = {
     "AdminAuditLog": AdminAuditLog,
     "AdminUsers": AdminUsers,
     "AdminDevices": AdminDevices,
+    "DevModelInputs": DevModelInputs,
 }
 
 export const pagesConfig = {
