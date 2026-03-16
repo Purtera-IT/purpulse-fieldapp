@@ -55,6 +55,11 @@ import TimeLog from './pages/TimeLog';
 import Support from './pages/Support';
 import AdminQC from './pages/AdminQC';
 import Onboarding from './pages/Onboarding';
+import AdminJobs from './pages/AdminJobs';
+import AdminSnapshot from './pages/AdminSnapshot';
+import AdminAuditLog from './pages/AdminAuditLog';
+import AdminUsers from './pages/AdminUsers';
+import AdminDevices from './pages/AdminDevices';
 import __Layout from './Layout.jsx';
 
 
