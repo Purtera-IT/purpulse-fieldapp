@@ -359,6 +359,16 @@ export default function Jobs() {
         </div>
       )}
 
+      {/* ── Active Job Hero (cards/list view only) ─────────── */}
+      {view !== 'calendar' && (() => {
+        const activeJob = filtered.find(j => ['in_progress', 'checked_in'].includes(j.status));
+        return activeJob ? (
+          <div className="max-w-2xl mx-auto w-full px-4 pt-2">
+            <ActiveJobHero job={activeJob} />
+          </div>
+        ) : null;
+      })()}
+
       {/* ── Content ───────────────────────────────────────── */}
       <div
         ref={listRef}
