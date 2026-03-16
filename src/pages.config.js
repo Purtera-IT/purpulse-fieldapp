@@ -53,6 +53,7 @@ import ActiveJob from './pages/ActiveJob';
 import EvidenceHub from './pages/EvidenceHub';
 import TimeLog from './pages/TimeLog';
 import Support from './pages/Support';
+import AdminQC from './pages/AdminQC';
 import __Layout from './Layout.jsx';
 
 
@@ -63,6 +64,7 @@ export const PAGES = {
     "EvidenceHub": EvidenceHub,
     "TimeLog": TimeLog,
     "Support": Support,
+    "AdminQC": AdminQC,
 }
 
 export const pagesConfig = {
