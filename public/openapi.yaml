@@ -1,0 +1,667 @@
+openapi: 3.1.0
+info:
+  title: Purpulse Field API
+  version: 1.0.0
+  description: |
+    REST API consumed by the Purpulse mobile field app and admin console.
+    All mutating endpoints require `X-Device-ID` and `X-Client-Request-ID` headers for
+    idempotency and audit. `client_event_id` is the canonical idempotency key — it survives
+    retries and is used to deduplicate writes server-side and trace events in the Audit Log.
+  contact:
+    name: Purpulse Platform Team
+
+servers:
+  - url: https://api.purpulse.dev/api/v1
+    description: Production
+
+security:
+  - BearerAuth: []
+
+# ─── Global Headers (applied to all mutating operations) ───────────────────────
+x-global-request-headers:
+  X-Device-ID:
+    description: Device identifier (from onboarding registration, stored in localStorage)
+    required: true
+    schema:
+      type: string
+      example: dev-m8x2k1-abc123
+  X-Client-Request-ID:
+    description: |
+      Idempotency key. Format: `evt-{timestamp36}-{random8}`.
+      The server treats two requests with the same X-Client-Request-ID as the same event —
+      the second returns the original response without re-processing.
+    required: true
+    schema:
+      type: string
+      example: evt-lq7f2r-a8c91b2d
+
+# ─── Paths ────────────────────────────────────────────────────────────────────
+paths:
+
+  # ── Jobs ──────────────────────────────────────────────────────────────────
+  /jobs:
+    get:
+      operationId: listJobs
+      summary: List jobs assigned to the authenticated technician
+      tags: [Jobs]
+      parameters:
+        - name: status
+          in: query
+          schema:
+            type: string
+            enum: [assigned,en_route,checked_in,in_progress,paused,pending_closeout,submitted,approved,rejected]
+        - name: scheduled_date
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 50
+        - name: cursor
+          in: query
+          description: Pagination cursor from previous response
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Paginated list of jobs
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobListResponse'
+
+  /jobs/{jobId}/events:
+    post:
+      operationId: createJobEvent
+      summary: Record a job lifecycle event (check-in, status change, work start/stop)
+      tags: [Jobs]
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobEventCreate'
+            example:
+              client_event_id: evt-lq7f2r-a8c91b2d
+              event_type: work_start
+              device_ts: "2026-03-16T08:45:00.000Z"
+              device_meta:
+                device_id: dev-m8x2k1-abc123
+                os: iOS
+                app_version: "1.4.2"
+                battery_pct: 87
+                network_type: wifi
+              geo:
+                lat: 51.5074
+                lon: -0.1278
+                accuracy_m: 8
+      responses:
+        '201':
+          description: Event recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobEventResponse'
+        '409':
+          description: Duplicate — client_event_id already processed
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdempotencyConflict'
+
+  /jobs/{jobId}/reassign:
+    post:
+      operationId: reassignJob
+      summary: Reassign a job to a different technician (admin/supervisor only)
+      tags: [Jobs]
+      parameters:
+        - $ref: '#/components/parameters/JobId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [assigned_to, reason]
+              properties:
+                assigned_to:
+                  type: string
+                  format: email
+                reason:
+                  type: string
+      responses:
+        '200':
+          description: Job reassigned
+        '403':
+          description: Insufficient role
+
+  # ── Evidence ──────────────────────────────────────────────────────────────
+  /evidence:
+    post:
+      operationId: createEvidence
+      summary: Create evidence metadata record and receive a SAS upload URL
+      tags: [Evidence]
+      description: |
+        Two-step upload flow:
+        1. POST /evidence → returns `sas_url` for direct-to-blob upload
+        2. PUT `sas_url` with file binary
+        3. POST /evidence/{id}/complete → marks upload done and triggers QC pipeline
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvidenceCreate'
+            example:
+              client_event_id: evt-kp2m4q-b7e03c1f
+              job_id: job_abc123
+              evidence_type: before_photo
+              content_type: image/jpeg
+              size_bytes: 1843200
+              captured_at: "2026-03-16T09:12:33.000Z"
+              runbook_step_id: step_phase2_3
+              geo:
+                lat: 51.5074
+                lon: -0.1278
+                accuracy_m: 12
+              device_meta:
+                device_id: dev-m8x2k1-abc123
+                os: Android
+      responses:
+        '201':
+          description: Evidence record created; SAS URL ready for upload
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceCreateResponse'
+        '409':
+          description: Duplicate client_event_id
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/IdempotencyConflict'
+
+  /evidence/{id}/complete:
+    post:
+      operationId: completeEvidenceUpload
+      summary: Confirm blob upload complete — triggers QC processing pipeline
+      tags: [Evidence]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EvidenceComplete'
+            example:
+              client_event_id: evt-kp2m4q-complete-b7e03c1f
+              upload_duration_ms: 1240
+              actual_size_bytes: 1843200
+              checksum_sha256: "e3b0c44298fc1c149afb...bf97"
+      responses:
+        '200':
+          description: Marked complete; QC pipeline triggered
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EvidenceCompleteResponse'
+
+  /evidence/{id}/qc-override:
+    post:
+      operationId: qcOverrideEvidence
+      summary: Manually override QC verdict (supervisor/admin only)
+      tags: [Evidence]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [verdict, reason]
+              properties:
+                verdict:
+                  type: string
+                  enum: [passed, failed]
+                reason:
+                  type: string
+                  description: Mandatory audit reason
+      responses:
+        '200':
+          description: QC override applied and audit event written
+
+  # ── Timesheets ────────────────────────────────────────────────────────────
+  /timesheets:
+    post:
+      operationId: createTimeEntry
+      summary: Record a time event (work_start, work_stop, break_start, break_end, travel_start, travel_end)
+      tags: [Timesheets]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TimeEntryCreate'
+            example:
+              client_event_id: evt-ts9x1z-d4f72a08
+              job_id: job_abc123
+              entry_type: work_start
+              timestamp: "2026-03-16T08:45:00.000Z"
+              source: app
+              geo:
+                lat: 51.5074
+                lon: -0.1278
+              device_meta:
+                device_id: dev-m8x2k1-abc123
+                battery_pct: 87
+      responses:
+        '201':
+          description: Time entry recorded
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TimeEntryResponse'
+        '409':
+          description: Duplicate client_event_id
+
+    get:
+      operationId: listTimeEntries
+      summary: List time entries for a date range
+      tags: [Timesheets]
+      parameters:
+        - name: job_id
+          in: query
+          schema:
+            type: string
+        - name: date_from
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: date_to
+          in: query
+          schema:
+            type: string
+            format: date
+        - name: source
+          in: query
+          schema:
+            type: string
+            enum: [app, manual, drag_edit]
+      responses:
+        '200':
+          description: List of time entries
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/TimeEntry'
+
+  /timesheets/{id}/lock:
+    post:
+      operationId: lockTimeEntry
+      summary: Lock a time entry (admin/supervisor only) — makes it immutable on mobile
+      tags: [Timesheets]
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                lock:
+                  type: boolean
+                  description: true to lock, false to unlock
+      responses:
+        '200':
+          description: Lock status updated
+
+  # ── Sync Queue ────────────────────────────────────────────────────────────
+  /sync/flush:
+    post:
+      operationId: flushSyncQueue
+      summary: Batch-apply a set of queued offline operations
+      tags: [Sync]
+      description: |
+        Used by the device when it reconnects. Each item in the batch
+        carries its own `client_event_id` for per-item idempotency.
+        Server processes items in order; partial failures are reported per-item.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SyncFlushRequest'
+      responses:
+        '200':
+          description: Batch result with per-item status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SyncFlushResponse'
+
+# ─── Components ───────────────────────────────────────────────────────────────
+components:
+
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  parameters:
+    JobId:
+      name: jobId
+      in: path
+      required: true
+      schema:
+        type: string
+
+  schemas:
+
+    # ── Shared ──────────────────────────────────────────────────────────────
+    GeoPoint:
+      type: object
+      properties:
+        lat:         { type: number, format: double }
+        lon:         { type: number, format: double }
+        accuracy_m:  { type: number, description: GPS accuracy in metres }
+
+    DeviceMeta:
+      type: object
+      properties:
+        device_id:    { type: string, description: "Stable device identifier from onboarding (localStorage purpulse_device_id)" }
+        os:           { type: string, enum: [iOS, Android, Web] }
+        app_version:  { type: string }
+        battery_pct:  { type: integer, minimum: 0, maximum: 100 }
+        network_type: { type: string, enum: [wifi, cellular, offline] }
+
+    IdempotencyConflict:
+      type: object
+      properties:
+        code:              { type: string, example: duplicate_event }
+        client_event_id:   { type: string }
+        original_created:  { type: string, format: date-time }
+        original_response: { type: object, description: Original response body }
+
+    # ── Jobs ────────────────────────────────────────────────────────────────
+    JobListResponse:
+      type: object
+      properties:
+        data:       { type: array, items: { $ref: '#/components/schemas/Job' } }
+        cursor:     { type: string }
+        has_more:   { type: boolean }
+
+    Job:
+      type: object
+      required: [id, title, status]
+      properties:
+        id:                   { type: string }
+        external_id:          { type: string }
+        title:                { type: string }
+        description:          { type: string }
+        status:               { type: string, enum: [assigned,en_route,checked_in,in_progress,paused,pending_closeout,submitted,approved,rejected] }
+        priority:             { type: string, enum: [low,medium,high,urgent] }
+        scheduled_date:       { type: string, format: date }
+        scheduled_time:       { type: string }
+        site_name:            { type: string }
+        site_address:         { type: string }
+        site_lat:             { type: number }
+        site_lon:             { type: number }
+        assigned_to:          { type: string, format: email }
+        runbook_phases:       { type: array, items: { $ref: '#/components/schemas/RunbookPhase' } }
+        evidence_requirements:{ type: array, items: { $ref: '#/components/schemas/EvidenceRequirement' } }
+        fields_schema:        { type: array, items: { $ref: '#/components/schemas/FieldDefinition' } }
+        sync_status:          { type: string, enum: [synced,pending,error] }
+
+    RunbookPhase:
+      type: object
+      properties:
+        id:    { type: string }
+        name:  { type: string }
+        order: { type: integer }
+        steps: { type: array, items: { $ref: '#/components/schemas/RunbookStep' } }
+
+    RunbookStep:
+      type: object
+      properties:
+        id:                      { type: string }
+        name:                    { type: string }
+        description:             { type: string }
+        order:                   { type: integer }
+        required_evidence_types: { type: array, items: { type: string } }
+        completed:               { type: boolean }
+        completed_at:            { type: string, format: date-time }
+
+    EvidenceRequirement:
+      type: object
+      properties:
+        type:        { type: string }
+        label:       { type: string }
+        min_count:   { type: integer }
+        description: { type: string }
+
+    FieldDefinition:
+      type: object
+      properties:
+        key:      { type: string }
+        label:    { type: string }
+        type:     { type: string, enum: [text,textarea,number,select,date,boolean] }
+        required: { type: boolean }
+        value:    { type: string }
+
+    JobEventCreate:
+      type: object
+      required: [client_event_id, event_type, device_ts, device_meta]
+      properties:
+        client_event_id:
+          type: string
+          description: "Idempotency key. Format: evt-{timestamp36}-{random8}"
+          example: evt-lq7f2r-a8c91b2d
+        event_type:
+          type: string
+          enum: [check_in,check_out,work_start,work_stop,pause,resume,submit,status_change]
+        new_status:
+          type: string
+          description: Required when event_type=status_change
+        device_ts:
+          type: string
+          format: date-time
+          description: Client-side timestamp at moment of event (NOT server receipt time)
+        device_meta:
+          $ref: '#/components/schemas/DeviceMeta'
+        geo:
+          $ref: '#/components/schemas/GeoPoint'
+        notes:
+          type: string
+
+    JobEventResponse:
+      type: object
+      properties:
+        id:              { type: string }
+        client_event_id: { type: string }
+        job_id:          { type: string }
+        event_type:      { type: string }
+        server_ts:       { type: string, format: date-time }
+
+    # ── Evidence ────────────────────────────────────────────────────────────
+    EvidenceCreate:
+      type: object
+      required: [client_event_id, job_id, evidence_type, content_type, captured_at, device_meta]
+      properties:
+        client_event_id:
+          type: string
+          description: "Idempotency key. Format: evt-{timestamp36}-{random8}"
+          example: evt-kp2m4q-b7e03c1f
+        job_id:
+          type: string
+        evidence_type:
+          type: string
+          enum: [site_photo,before_photo,after_photo,equipment_label,signature,chat_attachment,attachment]
+        content_type:
+          type: string
+          example: image/jpeg
+        size_bytes:
+          type: integer
+        captured_at:
+          type: string
+          format: date-time
+          description: Device-local capture timestamp
+        runbook_step_id:
+          type: string
+          description: Links evidence to a specific runbook step
+        geo:
+          $ref: '#/components/schemas/GeoPoint'
+        device_meta:
+          $ref: '#/components/schemas/DeviceMeta'
+        notes:
+          type: string
+
+    EvidenceCreateResponse:
+      type: object
+      properties:
+        id:
+          type: string
+          description: Evidence record ID (use for /complete call)
+        client_event_id:
+          type: string
+        sas_url:
+          type: string
+          format: uri
+          description: Azure Blob SAS URL — PUT file binary directly to this URL
+        sas_expires_at:
+          type: string
+          format: date-time
+          description: SAS URL expiry (typically 30 minutes)
+        blob_path:
+          type: string
+          description: "ADLS path: abfs://evidence@storage.dfs.core.windows.net/..."
+
+    EvidenceComplete:
+      type: object
+      required: [client_event_id]
+      properties:
+        client_event_id:
+          type: string
+          description: New unique event ID for this completion event (different from create event ID)
+          example: evt-kp2m4q-complete-b7e03c1f
+        upload_duration_ms:
+          type: integer
+        actual_size_bytes:
+          type: integer
+        checksum_sha256:
+          type: string
+          description: SHA-256 of uploaded blob — server validates against stored metadata
+
+    EvidenceCompleteResponse:
+      type: object
+      properties:
+        id:           { type: string }
+        status:       { type: string, example: processing }
+        qc_job_id:    { type: string, description: Async QC pipeline job ID }
+        file_url:     { type: string, format: uri, description: Public CDN URL (available after QC) }
+
+    # ── Timesheets ──────────────────────────────────────────────────────────
+    TimeEntryCreate:
+      type: object
+      required: [client_event_id, job_id, entry_type, timestamp, device_meta]
+      properties:
+        client_event_id:
+          type: string
+          description: "Idempotency key. Format: evt-{timestamp36}-{random8}"
+          example: evt-ts9x1z-d4f72a08
+        job_id:
+          type: string
+        entry_type:
+          type: string
+          enum: [work_start,work_stop,break_start,break_end,travel_start,travel_end]
+        timestamp:
+          type: string
+          format: date-time
+          description: Device-local event timestamp
+        source:
+          type: string
+          enum: [app,manual,drag_edit]
+          default: app
+        geo:
+          $ref: '#/components/schemas/GeoPoint'
+        notes:
+          type: string
+          description: Required when source=manual or source=drag_edit
+        override_reason:
+          type: string
+          description: Required when editing a previously synced entry
+        device_meta:
+          $ref: '#/components/schemas/DeviceMeta'
+
+    TimeEntry:
+      allOf:
+        - $ref: '#/components/schemas/TimeEntryCreate'
+        - type: object
+          properties:
+            id:              { type: string }
+            locked:          { type: boolean }
+            approved_by:     { type: string, format: email }
+            approved_at:     { type: string, format: date-time }
+            server_ts:       { type: string, format: date-time }
+
+    TimeEntryResponse:
+      type: object
+      properties:
+        id:              { type: string }
+        client_event_id: { type: string }
+        job_id:          { type: string }
+        entry_type:      { type: string }
+        server_ts:       { type: string, format: date-time }
+
+    # ── Sync ────────────────────────────────────────────────────────────────
+    SyncFlushRequest:
+      type: object
+      required: [items]
+      properties:
+        items:
+          type: array
+          maxItems: 100
+          items:
+            type: object
+            required: [client_event_id, entity_type, action, payload]
+            properties:
+              client_event_id: { type: string }
+              entity_type:     { type: string }
+              action:          { type: string, enum: [create,update,delete] }
+              payload:         { type: object }
+
+    SyncFlushResponse:
+      type: object
+      properties:
+        processed: { type: integer }
+        results:
+          type: array
+          items:
+            type: object
+            properties:
+              client_event_id: { type: string }
+              status:          { type: string, enum: [ok,duplicate,error] }
+              error:           { type: string }
+              server_id:       { type: string }

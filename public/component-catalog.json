@@ -1,0 +1,232 @@
+{
+  "$schema": "https://purpulse.dev/schemas/component-catalog/v1",
+  "generated": "2026-03-16",
+  "version": "1.0.0",
+  "components": [
+    {
+      "name": "StatusBadge",
+      "file": "components/field/StatusBadge.jsx",
+      "description": "Displays a job lifecycle status with colour-coded pill.",
+      "props": [
+        { "name": "status", "type": "string", "required": true, "values": ["assigned","en_route","checked_in","in_progress","paused","pending_closeout","submitted","approved","rejected"], "description": "Current job status key" }
+      ],
+      "variants": [
+        { "label": "In Progress", "props": { "status": "in_progress" } },
+        { "label": "Submitted",   "props": { "status": "submitted" } },
+        { "label": "Rejected",    "props": { "status": "rejected" } }
+      ]
+    },
+    {
+      "name": "SyncBadge",
+      "file": "components/field/StatusBadge.jsx",
+      "description": "Shows pending / error sync state. Renders nothing when synced.",
+      "props": [
+        { "name": "status", "type": "string", "required": true, "values": ["synced","pending","error"] }
+      ],
+      "variants": [
+        { "label": "Pending", "props": { "status": "pending" } },
+        { "label": "Error",   "props": { "status": "error" } },
+        { "label": "Synced (hidden)", "props": { "status": "synced" } }
+      ]
+    },
+    {
+      "name": "PriorityIndicator",
+      "file": "components/field/StatusBadge.jsx",
+      "description": "Dot + text priority chip.",
+      "props": [
+        { "name": "priority", "type": "string", "required": true, "values": ["low","medium","high","urgent"] }
+      ]
+    },
+    {
+      "name": "JobCard",
+      "file": "components/field/JobCard.jsx",
+      "description": "Horizontally swipeable job summary card. Left-swipe reveals Maps + Call; right-swipe starts timer.",
+      "props": [
+        { "name": "job",        "type": "Job",     "required": true,  "description": "Job entity object" },
+        { "name": "onStartTimer","type": "function","required": true,  "description": "(job: Job) => void" },
+        { "name": "isStarting", "type": "boolean", "required": false, "default": false, "description": "Shows spinner while timer initialises" }
+      ],
+      "variants": [
+        { "label": "Assigned",  "props": { "job": { "status": "assigned",  "priority": "medium" } } },
+        { "label": "Urgent",    "props": { "job": { "status": "assigned",  "priority": "urgent" } } },
+        { "label": "Active",    "props": { "job": { "status": "in_progress","priority": "high" } } },
+        { "label": "Submitted", "props": { "job": { "status": "submitted", "priority": "low"  } } }
+      ]
+    },
+    {
+      "name": "TimerPanel",
+      "file": "components/field/TimerPanel.jsx",
+      "description": "Live work-timer with start/pause/stop controls. Writes TimeEntry records.",
+      "props": [
+        { "name": "jobId",       "type": "string", "required": true },
+        { "name": "statusLabel", "type": "string", "required": false, "description": "E.g. 'In Progress'" }
+      ]
+    },
+    {
+      "name": "EvidenceCapture",
+      "file": "components/field/EvidenceCapture.jsx",
+      "description": "Full capture flow: camera → metadata → upload queue. Handles camera-denied fallback (file picker).",
+      "props": [
+        { "name": "jobId",        "type": "string", "required": true },
+        { "name": "evidenceType", "type": "string", "required": false, "default": "site_photo", "values": ["site_photo","before_photo","after_photo","equipment_label","signature","chat_attachment"] },
+        { "name": "onCaptured",   "type": "function", "required": false, "description": "() => void — called after evidence record created" }
+      ]
+    },
+    {
+      "name": "EvidenceTile",
+      "file": "components/field/EvidenceTile.jsx",
+      "description": "Thumbnail tile with QC badge overlay. Tappable.",
+      "props": [
+        { "name": "item",  "type": "Evidence", "required": true },
+        { "name": "size",  "type": "number",   "required": false, "default": 88, "description": "Width/height in px" },
+        { "name": "onTap", "type": "function", "required": false, "description": "(item: Evidence) => void" }
+      ],
+      "variants": [
+        { "label": "QC OK",       "props": { "item": { "status": "uploaded", "quality_score": 90 } } },
+        { "label": "QC Warning",  "props": { "item": { "status": "uploaded", "quality_score": 55 } } },
+        { "label": "QC Failed",   "props": { "item": { "status": "uploaded", "quality_score": 20 } } },
+        { "label": "Uploading",   "props": { "item": { "status": "uploading" } } },
+        { "label": "Face Detected","props": { "item": { "status": "uploaded", "face_detected": true, "face_redacted": false } } }
+      ]
+    },
+    {
+      "name": "QcBadge",
+      "file": "components/field/EvidenceTile.jsx",
+      "description": "Reusable QC state badge, importable independently.",
+      "props": [
+        { "name": "state",       "type": "string",  "required": true, "values": ["qc_ok","qc_warning","qc_failed","processing","uploaded","pending_upload"] },
+        { "name": "showTooltip", "type": "boolean", "required": false, "default": false }
+      ]
+    },
+    {
+      "name": "EvidenceScroller",
+      "file": "components/field/EvidenceScroller.jsx",
+      "description": "Horizontal thumbnail strip for a job. Includes Add button.",
+      "props": [
+        { "name": "job",        "type": "Job",      "required": true },
+        { "name": "onAddPhoto", "type": "function", "required": true, "description": "() => void — open capture sheet" }
+      ]
+    },
+    {
+      "name": "DailyTimeline",
+      "file": "components/field/DailyTimeline.jsx",
+      "description": "Visual vertical timeline with drag-to-resize segment handles (44px touch targets). Emits TimeEntry updates with client_event_id.",
+      "props": [
+        { "name": "entries",      "type": "TimeEntry[]", "required": true },
+        { "name": "date",         "type": "Date",        "required": true },
+        { "name": "onSegmentTap", "type": "function",    "required": false, "description": "(segment: Segment) => void" }
+      ],
+      "notes": "Exports buildSegments(entries) helper to derive typed segments for other consumers."
+    },
+    {
+      "name": "RunbookView",
+      "file": "components/field/RunbookView.jsx",
+      "description": "Phase-gated step list sourced from job.runbook_phases. Enforces sequential completion.",
+      "props": [
+        { "name": "job", "type": "Job", "required": true }
+      ]
+    },
+    {
+      "name": "ChatView",
+      "file": "components/field/ChatView.jsx",
+      "description": "Job-scoped real-time message thread. Polls every 10s. Supports image attachments.",
+      "props": [
+        { "name": "jobId", "type": "string", "required": true }
+      ]
+    },
+    {
+      "name": "QuickActionsBar",
+      "file": "components/field/QuickActionsBar.jsx",
+      "description": "Row of contextual action buttons (Photo, Attach, Note, Safety, More). Each opens a bottom sheet.",
+      "props": [
+        { "name": "job", "type": "Job", "required": true }
+      ]
+    },
+    {
+      "name": "SyncIndicator",
+      "file": "components/field/SyncIndicator.jsx",
+      "description": "Compact top-bar sync status pill. Auto-hides when fully synced.",
+      "props": []
+    },
+    {
+      "name": "OfflineBanner",
+      "file": "components/field/OfflineBanner.jsx",
+      "description": "Full-width amber offline warning shown when navigator.onLine is false.",
+      "props": [
+        { "name": "pendingCount", "type": "number", "required": false, "description": "Number of queued items pending sync" }
+      ]
+    },
+    {
+      "name": "BlockerForm",
+      "file": "components/field/BlockerForm.jsx",
+      "description": "Form to create a Blocker entity with type, severity, notes, and optional evidence.",
+      "props": [
+        { "name": "jobId",   "type": "string",   "required": true },
+        { "name": "onClose", "type": "function", "required": true }
+      ]
+    },
+    {
+      "name": "CheckInFlow",
+      "file": "components/field/CheckInFlow.jsx",
+      "description": "GPS check-in with distance guard and manual fallback.",
+      "props": [
+        { "name": "job",     "type": "Job",      "required": true },
+        { "name": "onClose", "type": "function", "required": true }
+      ]
+    },
+    {
+      "name": "AdminShell",
+      "file": "components/admin/AdminShell.jsx",
+      "description": "Dark sidebar layout shell for admin console pages. Handles mobile hamburger.",
+      "props": [
+        { "name": "title",    "type": "string",      "required": true },
+        { "name": "subtitle", "type": "string",      "required": false },
+        { "name": "children", "type": "ReactNode",   "required": true }
+      ]
+    },
+    {
+      "name": "DiagnosticsModal",
+      "file": "components/field/DiagnosticsModal.jsx",
+      "description": "Full-screen diagnostic overlay: device info, network telemetry, HTTP error log (intercepted via fetch patch), log export.",
+      "props": [
+        { "name": "onClose", "type": "function", "required": true }
+      ]
+    },
+    {
+      "name": "QueuedItemsViewer",
+      "file": "components/field/QueuedItemsViewer.jsx",
+      "description": "Dashboard table of pending/failed SyncQueue items with per-item retry/cancel and bulk Retry All.",
+      "props": [
+        { "name": "items",      "type": "SyncQueue[]", "required": true },
+        { "name": "jobs",       "type": "Job[]",       "required": false, "description": "Used to resolve job title from job_id" },
+        { "name": "onRetryAll", "type": "function",    "required": false }
+      ]
+    }
+  ],
+  "entities": {
+    "Job": {
+      "description": "Work order assigned to a technician",
+      "key_fields": ["id","title","status","priority","assigned_to","scheduled_date","site_lat","site_lon","runbook_phases","evidence_requirements","fields_schema","sync_status"]
+    },
+    "Evidence": {
+      "description": "A captured media item (photo, video, signature, attachment) linked to a job",
+      "key_fields": ["id","job_id","evidence_type","file_url","status","quality_score","quality_warning","geo_lat","geo_lon","captured_at","runbook_step_id"]
+    },
+    "TimeEntry": {
+      "description": "A single timestamped clock event for a job",
+      "key_fields": ["id","job_id","entry_type","timestamp","source","geo_lat","geo_lon","notes","locked","approved_by","client_request_id"]
+    },
+    "Blocker": {
+      "description": "An impediment reported during job execution",
+      "key_fields": ["id","job_id","blocker_type","severity","note","status"]
+    },
+    "ChatMessage": {
+      "description": "A message in the per-job thread",
+      "key_fields": ["id","job_id","body","sender_email","sent_at","client_message_id"]
+    },
+    "SyncQueue": {
+      "description": "Offline operation queue — also used for snapshots, device registrations",
+      "key_fields": ["id","entity_type","action","payload","status","retry_count","client_request_id","job_id"]
+    }
+  }
+}
