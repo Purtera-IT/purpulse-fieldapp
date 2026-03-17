@@ -170,7 +170,7 @@ export default function TimerPanel({ jobId, statusLabel, compact = false }) {
 
   return (
     <>
-      <div className={cn('rounded-[8px] p-4 transition-colors duration-300', cfg.bg)}>
+      <div className={cn('rounded-[8px] p-4 transition-colors duration-300', cfg.bg)} role="region" aria-live="polite" aria-label="Work timer">
 
         {/* Status badge — small rectangular enterprise style */}
         <div className="flex items-center justify-center mb-3">
