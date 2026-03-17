@@ -148,6 +148,7 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async (shouldRedirect = true) => {
     setUser(null);
+    setPermissions(null);
     setIsAuthenticated(false);
     setAuthError(null);
     clearOfflineCache(); // Clean up offline data
