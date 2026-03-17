@@ -226,13 +226,14 @@ export default function Jobs() {
             {/* View toggle */}
             <div className="flex bg-slate-100 rounded-xl p-0.5 gap-0.5 flex-shrink-0">
               {[
-                { id: 'cards',    Icon: LayoutGrid,   label: 'Cards' },
-                { id: 'list',     Icon: List,         label: 'List' },
-                { id: 'calendar', Icon: CalendarDays, label: 'Calendar' },
+                { id: 'table',    Icon: Table2,       label: 'Table',    desktopOnly: false },
+                { id: 'cards',    Icon: LayoutGrid,   label: 'Cards',    desktopOnly: false },
+                { id: 'list',     Icon: List,         label: 'List',     desktopOnly: false },
+                { id: 'calendar', Icon: CalendarDays, label: 'Calendar', desktopOnly: false },
               ].map(({ id, Icon, label }) => (
                 <button
                   key={id}
-                  onClick={() => setView(id)}
+                  onClick={() => { setView(id); setTablePage(0); }}
                   aria-label={label}
                   className={cn(
                     'h-9 w-9 rounded-lg flex items-center justify-center transition-all',
