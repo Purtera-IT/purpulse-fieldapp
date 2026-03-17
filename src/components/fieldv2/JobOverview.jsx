@@ -15,6 +15,7 @@ import {
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
+import JobStateTransitioner from './JobStateTransitioner';
 
 const STATUS_CFG = {
   assigned:         { label: 'Assigned',    bg: 'bg-slate-100',  text: 'text-slate-600'  },
