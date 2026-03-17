@@ -154,9 +154,10 @@ export default function JobDetail() {
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
                 className={cn(
-                  'flex-1 flex items-center justify-center gap-1 py-2 transition-colors text-[12px] font-semibold border-b-2',
+                  'flex-1 flex items-center justify-center gap-1 py-2 transition-colors text-[12px] font-semibold border-b-2 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-[#0B2D5C]',
                   active ? 'text-slate-900 border-b-[#0B2D5C]' : 'text-slate-500 border-transparent hover:text-slate-700'
                 )}
+                aria-current={active ? 'page' : undefined}
               >
                 <Icon className="h-3.5 w-3.5" />
                 {tab.label}
