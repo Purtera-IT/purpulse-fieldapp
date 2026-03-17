@@ -448,6 +448,46 @@ export default function AdminManifest() {
         </div>
       )}
 
+      {/* ── Job Timeline ─────────────────────────────────────────── */}
+      {activeSection === 'timeline' && (
+        <div className="space-y-3">
+          <div className="flex items-center gap-3">
+            <div className="flex-1">
+              <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest block mb-1">Job ID</label>
+              <input
+                value={timelineJobId}
+                onChange={e => setTimelineJobId(e.target.value)}
+                placeholder="Paste a job ID or work order ID…"
+                className="w-full h-9 px-3 rounded-[6px] border border-slate-200 text-xs focus:outline-none focus:ring-1 focus:ring-slate-400 font-mono"
+              />
+            </div>
+            {timelineJobId && (
+              <button onClick={() => setTimelineJobId('')}
+                className="h-9 px-3 rounded-[6px] bg-slate-100 text-slate-600 text-xs font-bold mt-5 hover:bg-slate-200">
+                Clear
+              </button>
+            )}
+          </div>
+          {/* Quick job picker from recent audit logs */}
+          {!timelineJobId && auditLogs.length > 0 && (
+            <div>
+              <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Recent Jobs (from audit log)</p>
+              <div className="flex flex-wrap gap-1.5">
+                {[...new Set(auditLogs.map(l => l.job_id).filter(Boolean))].slice(0, 10).map(jid => (
+                  <button key={jid} onClick={() => setTimelineJobId(jid)}
+                    className="h-7 px-2.5 rounded-[6px] bg-slate-100 text-slate-600 text-[10px] font-mono hover:bg-slate-800 hover:text-white transition-colors">
+                    {jid}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+          <div className="bg-white rounded-[8px] border border-slate-100 p-4">
+            <JobTimeline jobId={timelineJobId} />
+          </div>
+        </div>
+      )}
+
       {/* ── Dataset Snapshots ─────────────────────────────────────── */}
       {activeSection === 'snapshots' && (
         <div className="space-y-3">
