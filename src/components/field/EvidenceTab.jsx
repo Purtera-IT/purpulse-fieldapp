@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import EvidenceCapture from './EvidenceCapture';
 import EvidenceGallery from './EvidenceGallery';
 import EvidenceTable from './EvidenceTable';
+import EvidenceList from './EvidenceList';
 import { Camera, CheckCircle2, Circle, ChevronDown, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
