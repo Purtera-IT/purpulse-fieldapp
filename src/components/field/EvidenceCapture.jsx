@@ -6,7 +6,7 @@
  * Props: jobId, evidenceType, stepId, onCaptured
  */
 import React, { useRef, useState } from 'react';
-import { Camera, Images, ListOrdered } from 'lucide-react';
+import { Camera, Images, ListOrdered, AlertTriangle, RotateCcw } from 'lucide-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useUploadQueue } from '@/hooks/useUploadQueue';
 import EvidenceMetadataForm from './EvidenceMetadataForm';
@@ -25,7 +25,7 @@ export default function EvidenceCapture({ jobId, evidenceType, stepId, onCapture
   const cameraInputRef = useRef(null);
   const queryClient = useQueryClient();
 
-  const { queue, addToQueue, getPreview, retryItem, pauseItem, resumeItem, cancelItem, clearDone, retryAll } = useUploadQueue(queryClient);
+  const { queue, addToQueue, reattachFile, getPreview, retryItem, pauseItem, resumeItem, cancelItem, clearDone, retryAll } = useUploadQueue(queryClient);
 
   const jobQueue = queue.filter(i => i.jobId === jobId);
   const hasQueue = jobQueue.length > 0;
