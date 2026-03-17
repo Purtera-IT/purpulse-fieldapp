@@ -60,6 +60,13 @@ const AuthenticatedApp = () => {
           }
         />
       ))}
+      {/* ── New Field App v2 pages (no Layout shell) ── */}
+      <Route path="/FieldJobs"      element={<FieldJobs />} />
+      <Route path="/FieldJobDetail" element={<FieldJobDetail />} />
+      <Route path="/AdminDevPanel"  element={
+        <LayoutWrapper currentPageName="AdminDevPanel"><AdminDevPanel /></LayoutWrapper>
+      } />
+
       <Route path="*" element={<PageNotFound />} />
     </Routes>
   );
