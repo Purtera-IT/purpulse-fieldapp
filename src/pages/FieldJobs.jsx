@@ -9,7 +9,7 @@ import { Search, Loader2, ChevronRight, WifiOff } from 'lucide-react';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
-import { defaultAdapters } from '@/lib/fieldAdapters';
+import { apiClient } from '@/api/client';
 
 const STATUS_CFG = {
   assigned:         { label: 'Assigned',    bg: 'bg-slate-100',   text: 'text-slate-600',   dot: 'bg-slate-400'   },
@@ -92,13 +92,13 @@ function JobCard({ job }) {
   );
 }
 
-export default function FieldJobs({ adapter = defaultAdapters.jobs }) {
+export default function FieldJobs() {
   const [search,   setSearch]   = useState('');
   const [statusF,  setStatusF]  = useState('all');
 
   const { data: jobs = [], isLoading } = useQuery({
     queryKey: ['field-jobs'],
-    queryFn:  () => adapter.listJobs(),
+    queryFn:  () => apiClient.getJobs(),
     staleTime: 30_000,
   });
 
