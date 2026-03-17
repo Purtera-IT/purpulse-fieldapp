@@ -75,6 +75,8 @@ export default function TasksTab({ job }) {
   const [phases,         setPhases]         = useState(rawPhases);
   const [collapsedPhases,setCollapsedPhases] = useState({});
   const [escalateTask,   setEscalateTask]   = useState(null);
+  const [overrideTask,   setOverrideTask]   = useState(null);
+  const [phaseOverrides, setPhaseOverrides] = useState({});
 
   // A phase is unlocked if all BLOCKING tasks in previous phases are done
   const isPhaseUnlocked = (phaseIdx) => {
