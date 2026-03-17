@@ -8,8 +8,20 @@
  * - Release tracking
  */
 
-import * as Sentry from '@sentry/react';
-import { BrowserTracing } from '@sentry/tracing';
+/**
+ * Sentry is optional — gracefully handle if not installed
+ * To enable: npm install @sentry/react @sentry/tracing
+ */
+
+let Sentry = null;
+let BrowserTracing = null;
+
+try {
+  Sentry = require('@sentry/react');
+  BrowserTracing = require('@sentry/tracing').BrowserTracing;
+} catch (e) {
+  // Sentry not installed, will be disabled
+}
 
 const SENTRY_DSN = process.env.REACT_APP_SENTRY_DSN || process.env.VITE_SENTRY_DSN;
 const ENV = process.env.NODE_ENV || 'development';
