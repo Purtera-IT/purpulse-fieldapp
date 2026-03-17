@@ -1,0 +1,48 @@
+[
+  {
+    "id": "asset-001",
+    "job_id": "job-001",
+    "evidence_type": "site_photo",
+    "file_url": "https://via.placeholder.com/400x300?text=Tower+Site+A",
+    "thumbnail_url": "https://via.placeholder.com/100x75?text=Tower+Site+A",
+    "content_type": "image/jpeg",
+    "size_bytes": 45000,
+    "sha256": "abc123def456",
+    "exif_metadata": {
+      "make": "Apple",
+      "model": "iPhone 13",
+      "iso": 400,
+      "width_px": 1080,
+      "height_px": 1440
+    },
+    "captured_at": "2026-03-17T09:30:00Z",
+    "geo_lat": 39.7392,
+    "geo_lon": -104.9903,
+    "status": "uploaded",
+    "quality_score": 92,
+    "approved_for_training": false
+  },
+  {
+    "id": "asset-002",
+    "job_id": "job-001",
+    "evidence_type": "after_photo",
+    "file_url": "https://via.placeholder.com/400x300?text=After+Work",
+    "thumbnail_url": "https://via.placeholder.com/100x75?text=After+Work",
+    "content_type": "image/jpeg",
+    "size_bytes": 52000,
+    "sha256": "def456ghi789",
+    "exif_metadata": {
+      "make": "Apple",
+      "model": "iPhone 13",
+      "iso": 200,
+      "width_px": 1080,
+      "height_px": 1440
+    },
+    "captured_at": "2026-03-17T11:15:00Z",
+    "geo_lat": 39.7392,
+    "geo_lon": -104.9903,
+    "status": "uploaded",
+    "quality_score": 88,
+    "approved_for_training": true
+  }
+]

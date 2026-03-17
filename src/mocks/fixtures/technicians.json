@@ -1,0 +1,38 @@
+[
+  {
+    "id": "tech-001",
+    "name": "Alex Thompson",
+    "email": "tech01@company.com",
+    "phone": "555-1001",
+    "skill_tags": ["fiber_splice", "cell_tower", "cabling"],
+    "certifications": [
+      {
+        "name": "OSHA 30-Hour",
+        "issued": "2023-01-15",
+        "expires": "2026-01-15",
+        "status": "valid"
+      }
+    ],
+    "home_base_city": "Denver",
+    "employment_type": "full_time",
+    "active": true
+  },
+  {
+    "id": "tech-002",
+    "name": "Maria Garcia",
+    "email": "tech02@company.com",
+    "phone": "555-1002",
+    "skill_tags": ["fiber_splice", "das", "cabling", "ups"],
+    "certifications": [
+      {
+        "name": "OSHA 30-Hour",
+        "issued": "2022-06-20",
+        "expires": "2026-06-20",
+        "status": "valid"
+      }
+    ],
+    "home_base_city": "New York",
+    "employment_type": "contractor",
+    "active": true
+  }
+]
