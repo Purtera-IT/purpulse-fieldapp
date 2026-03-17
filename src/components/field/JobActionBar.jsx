@@ -150,7 +150,7 @@ export default function JobActionBar({ job, onOpenChat, isReadOnly }) {
     if (state !== 'working' || isReadOnly) return;
     haptic('tap');
     fire.mutate('break_start');
-    toast.success('Break started');
+    toast.success('Break time started');
   };
 
   const timerBg = state === 'working'   ? 'bg-emerald-600 text-white'
