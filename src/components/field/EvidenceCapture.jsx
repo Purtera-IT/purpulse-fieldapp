@@ -27,8 +27,20 @@ export default function EvidenceCapture({ jobId, evidenceType, stepId, onCapture
 
   const { queue, addToQueue, reattachFile, getPreview, retryItem, pauseItem, resumeItem, cancelItem, clearDone, retryAll } = useUploadQueue(queryClient);
 
-  const jobQueue = queue.filter(i => i.jobId === jobId);
-  const hasQueue = jobQueue.length > 0;
+  const jobQueue         = queue.filter(i => i.jobId === jobId);
+  const hasQueue         = jobQueue.length > 0;
+  const reattachItems    = jobQueue.filter(i => i.status === 'needs_reattach');
+  const expiredItems     = jobQueue.filter(i => i.status === 'expired');
+  const reattachInputRef = useRef(null);
+  const [reattachTarget, setReattachTarget] = useState(null); // queue item id
+
+  const handleReattach = (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !reattachTarget) return;
+    reattachFile(reattachTarget, file);
+    setReattachTarget(null);
+    e.target.value = '';
+  };
 
   const handleCameraCapture = (e) => {
     const file = e.target.files?.[0];
