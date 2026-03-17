@@ -320,15 +320,37 @@ export default function AdminManifest() {
       {/* ── Metrics ──────────────────────────────────────────────── */}
       {activeSection === 'metrics' && (
         <div className="space-y-4">
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
-            <MetricCard icon={Image}       label="Total Evidence"          value={totalEvidence}     color="text-blue-600" />
-            <MetricCard icon={BarChart3}   label="Avg Images / Job"        value={avgImgPerJob}      color="text-indigo-600" />
-            <MetricCard icon={CheckCircle2} label="Photos with Geo"        value={geoEvidence}       color="text-emerald-600" sub={`${totalEvidence ? ((geoEvidence/totalEvidence)*100).toFixed(0) : 0}% coverage`} />
-            <MetricCard icon={Tag}         label="Labeled Evidence"        value={labels.length}     color="text-amber-600"  sub={`${labelCoverage}% of uploads`} />
-            <MetricCard icon={Zap}         label="Approved for Training"   value={approvedTraining}  color={approvedTraining >= 500 ? 'text-emerald-600' : 'text-rose-600'} sub={approvedTraining >= 500 ? '✓ Training ready' : `Need ${500 - approvedTraining} more`} />
-            <MetricCard icon={Layers}      label="Embeddings"              value={withEmbedding}     color="text-purple-600" sub="512-dim vectors" />
-            <MetricCard icon={Mic}         label="Transcripts"             value={transcriptCount}   color="text-cyan-600" />
-            <MetricCard icon={Database}    label="Audit Log Entries"       value={auditLogs.length}  color="text-slate-600" />
+          {/* Row 1: Evidence counts */}
+          <div>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Evidence</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <MetricCard icon={Image}       label="evidence_count"              value={totalEvidence}       color="text-blue-600" />
+              <MetricCard icon={CheckCircle2} label="qc_passed"                  value={evByQcStatus.qc_passed} color="text-emerald-600" sub={`of ${totalEvidence}`} />
+              <MetricCard icon={AlertCircle} label="qc_failed"                   value={evByQcStatus.qc_failed} color="text-red-500"     sub={`${totalEvidence ? ((evByQcStatus.qc_failed/totalEvidence)*100).toFixed(0) : 0}%`} />
+              <MetricCard icon={Layers}      label="qc_unknown / pending"        value={evByQcStatus.unknown}   color="text-amber-500" />
+            </div>
+          </div>
+
+          {/* Row 2: Labels & ML */}
+          <div>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Labels & ML</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <MetricCard icon={Tag}         label="labeled_count"              value={labeledCount}          color="text-purple-600" sub={`${labelCoverage}% coverage`} />
+              <MetricCard icon={BarChart3}   label="avg_labels_per_evidence"    value={avgLabelsPerEv}         color="text-indigo-600" />
+              <MetricCard icon={Zap}         label="approved_for_training"      value={approvedTraining}       color={trainingReady ? 'text-emerald-600' : 'text-rose-600'} sub={trainingReady ? '✓ Training ready' : `Need ${500 - approvedTraining} more`} />
+              <MetricCard icon={Layers}      label="embeddings"                 value={withEmbedding}          color="text-purple-500" sub="512-dim vectors" />
+            </div>
+          </div>
+
+          {/* Row 3: Geo, Images, Transcripts, Manifest */}
+          <div>
+            <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-2">Coverage & Ingestion</p>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+              <MetricCard icon={CheckCircle2} label="images_with_geo_pct"       value={`${imagesWithGeoPct}%`} color="text-teal-600"   sub={`${geoEvidence} of ${totalEvidence}`} />
+              <MetricCard icon={BarChart3}    label="avg_images_per_job"        value={avgImgPerJob}           color="text-indigo-600" />
+              <MetricCard icon={Mic}          label="transcripts_count"         value={transcriptCount}        color="text-cyan-600" />
+              <MetricCard icon={Database}     label="manifest_rows_total"       value={manifestRowsTotal}      color="text-slate-600" sub={`${manifestMigrated} migrated`} />
+            </div>
           </div>
 
           {/* Training readiness banner */}
