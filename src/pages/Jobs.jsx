@@ -266,7 +266,6 @@ export default function Jobs() {
                 ))}
               </select>
             </div>
-          </div>
 
             {/* Reset link */}
             {activeFilterCount > 0 && (
