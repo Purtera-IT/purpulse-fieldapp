@@ -24,11 +24,11 @@ export function StatusBadge({ status, size = 'sm' }) {
   const config = STATUS_CONFIG[status] || STATUS_CONFIG.assigned;
   return (
     <span className={cn(
-      'inline-flex items-center gap-1.5 rounded-full font-medium',
+      'inline-flex items-center gap-1 rounded border font-semibold uppercase tracking-wide',
       config.bg, config.text,
-      size === 'sm' ? 'px-2.5 py-0.5 text-xs' : 'px-3 py-1 text-sm'
+      size === 'sm' ? 'px-1.5 py-px text-[10px]' : 'px-2 py-0.5 text-xs'
     )}>
-      <span className={cn('h-1.5 w-1.5 rounded-full', config.dot)} />
+      <span className={cn('h-1.5 w-1.5 rounded-full flex-shrink-0', config.dot)} />
       {config.label}
     </span>
   );
