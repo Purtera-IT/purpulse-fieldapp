@@ -268,15 +268,16 @@ export default function Jobs() {
             </div>
           </div>
 
-          {/* Reset link */}
-          {activeFilterCount > 0 && (
-            <button
-              onClick={() => { setPriorityFilter('all'); setDateFilter('all'); setTechFilter('all'); }}
-              className="w-full mt-3 text-xs text-red-600 font-semibold flex items-center gap-1 justify-center py-2 hover:bg-red-50 rounded-[6px] transition-colors focus:outline-none focus:ring-2 focus:ring-[#0B2D5C]"
-            >
-              <X className="h-3 w-3" /> Clear advanced filters
-            </button>
-          )}
+            {/* Reset link */}
+            {activeFilterCount > 0 && (
+              <button
+                onClick={() => { setPriorityFilter('all'); setDateFilter('all'); setTechFilter('all'); }}
+                className="w-full mt-3 text-xs text-red-600 font-semibold flex items-center gap-1 justify-center py-2 hover:bg-red-50 rounded-[6px] transition-colors focus:outline-none focus:ring-2 focus:ring-[#0B2D5C]"
+              >
+                <X className="h-3 w-3" /> Clear advanced filters
+              </button>
+            )}
+          </div>
         </div>
       )}
 
