@@ -206,7 +206,8 @@ export default function Jobs() {
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
 
-      {/* ── Jobs Header (compact, professional) ── */}
+      {/* ── Jobs Header (sticky top) ── */}
+      <div className="sticky top-0 z-40 bg-slate-50">
       <JobsHeader
         jobCount={allJobs.filter(j => matchesStatus(j, 'all')).length}
         activeFilter={statusFilter}
