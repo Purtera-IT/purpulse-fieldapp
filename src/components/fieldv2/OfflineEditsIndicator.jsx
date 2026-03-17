@@ -5,16 +5,11 @@
 
 import React, { useEffect, useState } from 'react'
 import { AlertCircle, CheckCircle2, Clock, Wifi, WifiOff } from 'lucide-react'
-import { jobRepository, type QueuedEdit } from '@/lib/repositories/jobRepository'
+import { jobRepository } from '@/lib/repositories/jobRepository'
 import { cn } from '@/lib/utils'
 
-interface Props {
-  jobId: string
-  isOnline: boolean
-}
-
-export default function OfflineEditsIndicator({ jobId, isOnline }: Props) {
-  const [pendingEdits, setPendingEdits] = useState<QueuedEdit[]>([])
+export default function OfflineEditsIndicator({ jobId, isOnline }) {
+  const [pendingEdits, setPendingEdits] = useState([])
   const [isSyncing, setIsSyncing] = useState(false)
 
   // Reload edits when jobId changes or offline status changes
