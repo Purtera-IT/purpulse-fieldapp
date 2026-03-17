@@ -61,6 +61,7 @@ import AdminAuditLog from './pages/AdminAuditLog';
 import AdminUsers from './pages/AdminUsers';
 import AdminDevices from './pages/AdminDevices';
 import DevModelInputs from './pages/DevModelInputs';
+import AdminManifest from './pages/AdminManifest';
 import Chat from './pages/Chat';
 import Profile from './pages/Profile';
 import __Layout from './Layout.jsx';
