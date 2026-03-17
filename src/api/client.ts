@@ -16,7 +16,7 @@ import {
   type Meeting,
   type AuthResponse,
 } from './types'
-import { base44 } from './base44Client'
+import { base44 } from '@/api/base44Client'
 
 /**
  * APIClient — Centralized API adapter with retry logic, validation, and typed responses
