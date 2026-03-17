@@ -197,7 +197,7 @@ export default function JobActionBar({ job, onOpenChat, isReadOnly }) {
 
           <div className="w-px h-7 bg-slate-200 flex-shrink-0" />
 
-          {/* Action buttons — 36px, rectangular */}
+          {/* Action buttons — 44px minimum */}
           {ACTION_BTNS.map(btn => {
             const Icon = btn.Icon;
             return (
@@ -205,13 +205,17 @@ export default function JobActionBar({ job, onOpenChat, isReadOnly }) {
                 key={btn.id}
                 onClick={() => setSheet(btn.id)}
                 className={cn(
-                  'flex flex-col items-center justify-center flex-1 h-10 rounded-md transition-all active:scale-95 gap-0.5',
-                  btn.bg
+                  'flex flex-col items-center justify-center flex-1 h-12 rounded-md transition-all active:scale-95 gap-0.5 focus:outline-none focus:ring-2 focus:ring-offset-1',
+                  btn.bg,
+                  btn.id === 'photo' && 'focus:ring-blue-500',
+                  btn.id === 'note' && 'focus:ring-blue-500',
+                  btn.id === 'blocker' && 'focus:ring-red-600',
+                  btn.id === 'chat' && 'focus:ring-blue-600'
                 )}
                 aria-label={btn.label}
               >
                 <Icon className={cn('h-4 w-4', btn.cls)} />
-                <span className={cn('text-[9px] font-semibold', btn.cls)}>{btn.label}</span>
+                <span className={cn('text-[10px] font-semibold', btn.cls)}>{btn.label}</span>
               </button>
             );
           })}
