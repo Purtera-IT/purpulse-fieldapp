@@ -197,22 +197,56 @@ export default function AdminManifest() {
   });
 
   // ── CSV export helpers ────────────────────────────────────────────
+  const MANIFEST_CSV_COLUMNS = ['manifest_id', 'object_id', 'old_url', 'new_url', 'sha256', 'work_order_id', 'created_at', 'migrated'];
+
+  function toManifestCsvRow(r) {
+    const azureUrl = r.azure_blob_url || '';
+    const migrated = !!(azureUrl && !azureUrl.startsWith('http://mock') && azureUrl !== r.file_url);
+    return {
+      manifest_id:   r.id          ?? '',
+      object_id:     r.evidence_id ?? '',
+      old_url:       r.file_url    ?? '',
+      new_url:       azureUrl,
+      sha256:        r.sha256      ?? '',
+      work_order_id: r.job_id      ?? '',
+      created_at:    r.created_date ? new Date(r.created_date).toISOString() : '',
+      migrated:      migrated ? 'true' : 'false',
+    };
+  }
+
+  function buildCSV(columns, rows) {
+    const esc = v => { const s = String(v ?? ''); return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g,'""')}"` : s; };
+    const header = columns.join(',');
+    const body   = rows.map(r => columns.map(k => esc(r[k])).join(',')).join('\n');
+    return rows.length ? `\uFEFF${header}\n${body}` : `\uFEFF${header}`;
+  }
+
   const exportManifests = () => {
-    downloadCSV(rowsToCSV(manifests), `purpulse-manifest-${new Date().toISOString().slice(0,10)}.csv`);
+    const rows = manifests.map(toManifestCsvRow);
+    const csv  = buildCSV(MANIFEST_CSV_COLUMNS, rows);
+    downloadCSV(csv, `purpulse-manifest-${new Date().toISOString().slice(0,10)}.csv`);
     base44.entities.AuditLog.create({
-      action_type: 'manifest_exported', actor_email: 'admin@purpulse.com',
-      actor_role: 'admin', result: 'success',
-      payload_summary: JSON.stringify({ rows: manifests.length }),
+      action_type: 'manifest_exported', entity_type: 'UploadManifest',
+      actor_email: 'admin@purpulse.com', actor_role: 'admin', result: 'success',
+      payload_summary: JSON.stringify({ export_type: 'manifest', since: null, row_count: rows.length }),
       client_ts: new Date().toISOString(), server_ts: new Date().toISOString(),
     }).catch(() => {});
   };
 
+  const AUDIT_CSV_COLUMNS = ['id','job_id','action_type','entity_type','entity_id','actor_email','actor_role','result','client_ts','server_ts','duration_ms','session_id','device_id','ip_address','error_message','payload_summary'];
+
   const exportAuditLogs = () => {
-    downloadCSV(rowsToCSV(auditLogs), `purpulse-audit-${new Date().toISOString().slice(0,10)}.csv`);
+    const rows = auditLogs.map(r => ({
+      ...r,
+      client_ts: r.client_ts ? new Date(r.client_ts).toISOString() : '',
+      server_ts: r.server_ts ? new Date(r.server_ts).toISOString() : '',
+    }));
+    const csv = buildCSV(AUDIT_CSV_COLUMNS, rows);
+    downloadCSV(csv, `purpulse-audit-logs-${new Date().toISOString().slice(0,10)}.csv`);
     base44.entities.AuditLog.create({
-      action_type: 'audit_exported', actor_email: 'admin@purpulse.com',
-      actor_role: 'admin', result: 'success',
-      payload_summary: JSON.stringify({ rows: auditLogs.length }),
+      action_type: 'audit_exported', entity_type: 'AuditLog',
+      actor_email: 'admin@purpulse.com', actor_role: 'admin', result: 'success',
+      payload_summary: JSON.stringify({ export_type: 'audit_log', since: null, row_count: rows.length }),
       client_ts: new Date().toISOString(), server_ts: new Date().toISOString(),
     }).catch(() => {});
   };
