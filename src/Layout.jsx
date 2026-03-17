@@ -46,6 +46,12 @@ export default function Layout({ children, currentPageName }) {
   const hideNav   = hideShell || HIDE_NAV_PAGES.includes(currentPageName);
   const meta      = PAGE_META[currentPageName] ?? { title: currentPageName };
 
+  // Apply density class to <body> once on mount
+  useEffect(() => {
+    document.body.classList.remove('density-compact', 'density-comfortable');
+    document.body.classList.add(`density-${APP_DENSITY}`);
+  }, []);
+
   if (hideShell) {
     // Full-screen pages (onboarding, job detail) get no chrome at all
     return <>{children}</>;
