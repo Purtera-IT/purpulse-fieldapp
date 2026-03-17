@@ -13,6 +13,7 @@ import { Input } from '@/components/ui/input';
 import OfflineBanner from '../components/field/OfflineBanner';
 import JobRichCard, { PRIORITY_CFG, STATUS_CFG, getProgress, formatSchedule } from '../components/field/JobRichCard';
 import JobsCalendar from '../components/field/JobsCalendar';
+import JobsTable from '../components/field/JobsTable';
 import { useJobQueue } from '../hooks/useJobQueue';
 import { MOCK_JOBS } from '../lib/mockJobs';
 import ActiveJobHero from '../components/field/ActiveJobHero';
