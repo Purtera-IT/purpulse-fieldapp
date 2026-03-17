@@ -85,15 +85,15 @@ export default function EvidenceTab({ job }) {
         </div>
       )}
 
-      {/* ── Desktop: enterprise table / Mobile: gallery ────── */}
+      {/* ── Desktop: enterprise table / Mobile: list ──────── */}
       {/* Desktop */}
       <div className="hidden lg:block">
         <EvidenceTable evidence={displayEvidence} jobId={job.id} />
       </div>
 
       {/* Mobile */}
-      <div className="lg:hidden bg-white rounded-[8px] border border-slate-100 p-3">
-        <EvidenceGallery items={displayEvidence} jobId={job.id} />
+      <div className="lg:hidden bg-white rounded-[8px] border border-slate-100">
+        <EvidenceList items={displayEvidence} jobId={job.id} onCaptureClick={() => setShowCapture(true)} />
       </div>
 
     </div>
