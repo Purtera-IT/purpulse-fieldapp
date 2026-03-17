@@ -140,6 +140,30 @@ export default function LabelerModal({
               className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-slate-400" />
           </div>
 
+          {/* Approved for Training toggle */}
+          <div
+            onClick={() => setApprovedForTraining(v => !v)}
+            className={cn(
+              'flex items-center justify-between px-4 py-3 rounded-xl border-2 cursor-pointer transition-all select-none',
+              approvedForTraining
+                ? 'bg-emerald-50 border-emerald-400'
+                : 'bg-slate-50 border-slate-200'
+            )}
+          >
+            <div>
+              <p className={cn('text-xs font-bold', approvedForTraining ? 'text-emerald-700' : 'text-slate-700')}>
+                Approved for Training
+              </p>
+              <p className="text-[10px] text-slate-400 mt-0.5">Include this label in ML training dataset</p>
+            </div>
+            <div className={cn(
+              'h-6 w-10 rounded-full transition-colors flex items-center flex-shrink-0 px-0.5',
+              approvedForTraining ? 'bg-emerald-500 justify-end' : 'bg-slate-200 justify-start'
+            )}>
+              <div className="h-5 w-5 rounded-full bg-white shadow-sm" />
+            </div>
+          </div>
+
           {/* Submit */}
           <button onClick={() => mutation.mutate()} disabled={mutation.isPending}
             className="w-full h-11 rounded-xl bg-slate-900 text-white font-bold text-sm flex items-center justify-center gap-2 hover:bg-slate-700 disabled:opacity-50 transition-colors">
