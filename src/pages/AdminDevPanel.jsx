@@ -36,6 +36,14 @@ export default function AdminDevPanel() {
   const [seedLog,   setSeedLog]   = useState([]);
   const [backend,   setBackend]   = useState(() => localStorage.getItem('purpulse_storage_backend') || 'base44');
   const [togglingId, setTogglingId] = useState(null);
+  const [mockScenario, setMockScenario] = useState(() => {
+    try {
+      const { getMockScenario } = require('@/mocks/handlers');
+      return getMockScenario();
+    } catch {
+      return 'success';
+    }
+  });
 
   const { data: manifests  = [], isLoading: lM } = useQuery({ queryKey: ['adp-manifests'],  queryFn: () => base44.entities.UploadManifest.list('-created_date', 500) });
   const { data: auditLogs  = [], isLoading: lA } = useQuery({ queryKey: ['adp-audit'],       queryFn: () => base44.entities.AuditLog.list('-created_date', 500) });
@@ -62,6 +70,17 @@ export default function AdminDevPanel() {
   const switchBackend = (val) => {
     setBackend(val);
     localStorage.setItem('purpulse_storage_backend', val);
+  };
+
+  /* ── MSW Mock scenario toggle ────────────────────────────────────── */
+  const switchMockScenario = (scenario) => {
+    try {
+      const { setMockScenario } = require('@/mocks/handlers');
+      setMockScenario(scenario);
+      setMockScenario(scenario);
+    } catch (err) {
+      console.error('[AdminDevPanel] Failed to switch mock scenario:', err);
+    }
   };
 
   /* ── CSV exports ─────────────────────────────────────────────────── */
@@ -120,7 +139,7 @@ export default function AdminDevPanel() {
       {/* ── Storage Backend ───────────────────────────────────────────── */}
       <section className="mb-6">
         <h2 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-3">Storage Backend Mock</h2>
-        <div className="flex gap-3">
+        <div className="flex gap-3 mb-4">
           {['base44', 'azure-placeholder'].map(b => (
             <button key={b} onClick={() => switchBackend(b)}
               className={cn('flex items-center gap-2 h-9 px-4 rounded-[8px] border text-xs font-bold transition-colors',
@@ -132,9 +151,29 @@ export default function AdminDevPanel() {
             </button>
           ))}
         </div>
-        <p className="text-[10px] text-slate-400 mt-2">
+        <p className="text-[10px] text-slate-400 mb-4">
           Mock backend — adapters read <code className="bg-slate-100 px-1 rounded">localStorage.purpulse_storage_backend</code>
         </p>
+
+        {/* MSW Mock Scenarios */}
+        <h3 className="text-xs font-black text-slate-400 uppercase tracking-widest mb-2">MSW Mock Scenarios</h3>
+        <div className="flex flex-wrap gap-2">
+          {[
+            { id: 'success', label: '✓ Success', desc: 'Fast responses (100ms)' },
+            { id: 'slow', label: '⏱ Slow Network', desc: '3s delay' },
+            { id: 'error', label: '❌ Server Error', desc: '500 responses' },
+            { id: 'offline', label: '🔌 Offline', desc: 'Network failures' },
+          ].map(s => (
+            <button key={s.id} onClick={() => switchMockScenario(s.id)}
+              className={cn('flex flex-col items-start h-16 px-3 py-2 rounded-[8px] border text-xs font-bold transition-colors',
+                mockScenario === s.id ? 'bg-slate-900 text-white border-slate-900' : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400'
+              )}>
+              <span>{s.label}</span>
+              <span className={cn('text-[9px]', mockScenario === s.id ? 'text-slate-300' : 'text-slate-400')}>{s.desc}</span>
+              {mockScenario === s.id && <span className="text-[9px] bg-white/20 px-1 py-0.5 rounded mt-auto">active</span>}
+            </button>
+          ))}
+        </div>
       </section>
 
       {/* ── Export ────────────────────────────────────────────────────── */}
