@@ -279,7 +279,11 @@ export default function Jobs() {
         </div>
       )}
 
-      {!isOnline && <OfflineBanner pendingCount={pendingCount} />}
+      {!isOnline && (
+        <div className="sticky top-[60px] z-30">
+          <OfflineBanner pendingCount={pendingCount} />
+        </div>
+      )}
 
       {/* ── Status line ── */}
       <div className="max-w-2xl mx-auto w-full px-4 py-2 flex items-center gap-2 text-[11px] bg-white border-b border-slate-50">
