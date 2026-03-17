@@ -1,0 +1,141 @@
+/**
+ * enterprise.css — CSS custom properties derived from design-tokens.enterprise.json
+ *
+ * Apply both classes to <body> (or any root element) to activate:
+ *   <body class="theme-enterprise density-compact">
+ *
+ * .theme-enterprise  — overrides color, radius, shadow, and type tokens
+ * .density-compact   — tightens spacing and font sizes for data-dense UIs
+ */
+
+/* ── Base token variables (always available) ─────────────────────── */
+:root {
+  --ent-grid:          8px;
+
+  /* Spacing */
+  --ent-space-xs:      4px;
+  --ent-space-sm:      8px;
+  --ent-space-md:      12px;
+  --ent-space-lg:      16px;
+  --ent-space-xl:      24px;
+  --ent-space-xxl:     32px;
+
+  /* Colors */
+  --ent-brand:         #0B2D5C;
+  --ent-accent:        #0B66B2;
+  --ent-success:       #0E8A5F;
+  --ent-warn:          #B76A00;
+  --ent-danger:        #B33A3A;
+  --ent-neutral-900:   #0F1724;
+  --ent-neutral-700:   #334155;
+  --ent-neutral-500:   #6B7280;
+  --ent-neutral-200:   #E6EEF3;
+  --ent-neutral-50:    #F8FAFC;
+
+  /* Typography */
+  --ent-text-h1:       20px;
+  --ent-text-h2:       16px;
+  --ent-text-h3:       14px;
+  --ent-text-body:     14px;
+  --ent-text-caption:  11px;
+  --ent-weight-semibold: 600;
+  --ent-weight-normal:   400;
+
+  /* Radius */
+  --ent-radius-sm:     4px;
+  --ent-radius-md:     8px;
+  --ent-radius-lg:     12px;
+
+  /* Shadow */
+  --ent-shadow-sm:     0 2px 6px rgba(15, 23, 36, 0.06);
+
+  /* Minimum touch target */
+  --ent-touch:         44px;
+}
+
+/* ── .theme-enterprise — map enterprise tokens onto Tailwind CSS vars ─ */
+.theme-enterprise {
+  /* Override Tailwind's shadcn CSS variable set */
+  --background:        248 250 252;     /* neutral-50 */
+  --foreground:        15 23 36;        /* neutral-900 */
+  --primary:           11 45 92;        /* brand */
+  --primary-foreground: 248 250 252;
+  --secondary:         230 238 243;     /* neutral-200 */
+  --secondary-foreground: 51 65 85;     /* neutral-700 */
+  --muted:             230 238 243;
+  --muted-foreground:  107 114 128;     /* neutral-500 */
+  --accent:            11 102 178;      /* accent */
+  --accent-foreground: 248 250 252;
+  --destructive:       179 58 58;       /* danger */
+  --destructive-foreground: 248 250 252;
+  --border:            230 238 243;
+  --input:             230 238 243;
+  --ring:              11 102 178;
+  --radius:            0.5rem;          /* 8px = radius-md */
+
+  /* Surface */
+  background-color:    var(--ent-neutral-50);
+  color:               var(--ent-neutral-900);
+  font-size:           var(--ent-text-body);
+}
+
+/* Override card radius to enterprise scale */
+.theme-enterprise .rounded-2xl { border-radius: var(--ent-radius-lg) !important; }
+.theme-enterprise .rounded-xl  { border-radius: var(--ent-radius-md) !important; }
+.theme-enterprise .rounded-lg  { border-radius: var(--ent-radius-sm) !important; }
+
+/* Override shadows */
+.theme-enterprise .shadow-sm,
+.theme-enterprise [class*="shadow"] { box-shadow: var(--ent-shadow-sm) !important; }
+
+/* Ensure all interactive targets meet minimum 44px */
+.theme-enterprise button,
+.theme-enterprise a,
+.theme-enterprise [role="button"] { min-height: var(--ent-touch); }
+
+/* ── .density-compact — tighten spacing & font sizes ──────────────── */
+.density-compact {
+  --ent-space-xs:      2px;
+  --ent-space-sm:      4px;
+  --ent-space-md:      8px;
+  --ent-space-lg:      12px;
+  --ent-space-xl:      16px;
+  --ent-space-xxl:     24px;
+
+  --ent-text-h1:       17px;
+  --ent-text-h2:       14px;
+  --ent-text-h3:       12px;
+  --ent-text-body:     12px;
+  --ent-text-caption:  10px;
+
+  /* Relax touch minimum for truly compact table/list contexts */
+  --ent-touch:         36px;
+}
+
+/* Compact Tailwind padding overrides — applied inside .density-compact */
+.density-compact .p-4  { padding:      var(--ent-space-lg) !important; }
+.density-compact .p-3  { padding:      var(--ent-space-md) !important; }
+.density-compact .px-4 { padding-left: var(--ent-space-lg) !important; padding-right: var(--ent-space-lg) !important; }
+.density-compact .py-3 { padding-top:  var(--ent-space-md) !important; padding-bottom: var(--ent-space-md) !important; }
+.density-compact .gap-4 { gap: var(--ent-space-lg) !important; }
+.density-compact .gap-3 { gap: var(--ent-space-md) !important; }
+.density-compact .gap-2 { gap: var(--ent-space-sm) !important; }
+.density-compact .mb-4  { margin-bottom: var(--ent-space-lg) !important; }
+.density-compact .mb-3  { margin-bottom: var(--ent-space-md) !important; }
+.density-compact .space-y-4 > * + * { margin-top: var(--ent-space-lg) !important; }
+.density-compact .space-y-3 > * + * { margin-top: var(--ent-space-md) !important; }
+
+/* Compact font sizes */
+.density-compact h1, .density-compact .text-2xl { font-size: var(--ent-text-h1) !important; }
+.density-compact h2, .density-compact .text-xl  { font-size: var(--ent-text-h2) !important; }
+.density-compact h3, .density-compact .text-lg  { font-size: var(--ent-text-h3) !important; }
+.density-compact p,
+.density-compact .text-sm  { font-size: var(--ent-text-body) !important; }
+.density-compact .text-xs,
+.density-compact .text-\[11px\] { font-size: var(--ent-text-caption) !important; }
+
+/* Compact card / row heights */
+.density-compact .h-14 { height: 36px !important; }
+.density-compact .h-12 { height: 32px !important; }
+.density-compact .h-11 { height: 30px !important; }
+.density-compact .h-10 { height: 28px !important; }

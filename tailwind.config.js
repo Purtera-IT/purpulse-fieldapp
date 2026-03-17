@@ -1,7 +1,15 @@
 /** @type {import('tailwindcss').Config} */
+
+// ── Enterprise design tokens ─────────────────────────────────────────
+const ent = require('./src/design-tokens/design-tokens.enterprise.json');
+
 module.exports = {
     darkMode: ["class"],
     content: ["./index.html", "./src/**/*.{ts,tsx,js,jsx}"],
+    safelist: [
+      // Theme & density utility classes used dynamically on <body>
+      'theme-enterprise', 'density-compact', 'density-comfortable',
+    ],
   theme: {
   	extend: {
   		borderRadius: {
