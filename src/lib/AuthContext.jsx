@@ -138,11 +138,14 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-  const logout = (shouldRedirect = true) => {
+  const logout = async (shouldRedirect = true) => {
     setUser(null);
     setIsAuthenticated(false);
     setAuthError(null);
     clearOfflineCache(); // Clean up offline data
+    
+    // Clear secure token storage and local DB/uploads
+    await authManager.logout();
     
     if (shouldRedirect) {
       // Use the SDK's logout method which handles token cleanup and redirect
