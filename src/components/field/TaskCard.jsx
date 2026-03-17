@@ -112,64 +112,57 @@ export default function TaskCard({ task, phaseColor, orderNum, isPhaseUnlocked, 
         onClick={() => isPhaseUnlocked && setExpanded(v => !v)}
         aria-expanded={expanded}
       >
-        <div className="flex items-start gap-3 p-3.5">
+        <div className="flex items-center gap-2 px-2.5 py-2">
           {/* Order chip + gate dot */}
-          <div className="flex flex-col items-center gap-1.5 flex-shrink-0 pt-0.5">
+          <div className="flex flex-col items-center gap-1 flex-shrink-0">
             <div className={cn(
-              'h-6 w-6 rounded-full flex items-center justify-center text-[10px] font-black text-white',
+              'h-5 w-5 rounded-[4px] flex items-center justify-center text-[9px] font-black text-white',
               `bg-${phaseColor}-500`
             )}>
               {orderNum}
             </div>
-            <div className={cn('h-2 w-2 rounded-full', gateCfg.bg)} title={gateCfg.tip} />
+            <div className={cn('h-1.5 w-1.5 rounded-full', gateCfg.bg)} title={gateCfg.tip} />
           </div>
 
           <div className="flex-1 min-w-0">
-            <div className="flex items-start gap-2">
+            <div className="flex items-center gap-1.5">
               <p className={cn(
-                'text-sm font-black leading-snug flex-1',
+                'text-xs font-bold leading-snug flex-1 truncate',
                 status === 'done' ? 'text-slate-400 line-through' : 'text-slate-900'
               )}>
                 {task.title}
               </p>
-              <StatusIcon className={cn('h-4 w-4 flex-shrink-0 mt-0.5', statusCfg.cls)} />
+              <StatusIcon className={cn('h-3.5 w-3.5 flex-shrink-0', statusCfg.cls)} />
             </div>
 
-            <div className="flex items-center gap-2 mt-1.5 flex-wrap">
-              <span className="flex items-center gap-1 text-[10px] text-slate-400">
-                <Clock className="h-2.5 w-2.5" /> {task.duration_est}
-              </span>
-              <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', `bg-${phaseColor}-100`, `text-${phaseColor}-700`)}>
-                {statusCfg.label}
+            <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+              <span className="flex items-center gap-0.5 text-[10px] text-slate-400">
+                <Clock className="h-2 w-2" /> {task.duration_est}
               </span>
               {task.gate === 'blocking' && status !== 'done' && (
-                <span className="text-[10px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">⛔ GATE</span>
+                <span className="text-[9px] font-black text-red-600 bg-red-50 px-1 py-px rounded border border-red-200">GATE</span>
               )}
               {qcFailCount > 0 && (
-                <span className="text-[10px] font-black text-red-600 bg-red-50 px-1.5 rounded border border-red-200">{qcFailCount} QC fail</span>
+                <span className="text-[9px] font-black text-red-600 bg-red-50 px-1 rounded border border-red-200">{qcFailCount} QC✗</span>
               )}
               {qcWarnCount > 0 && (
-                <span className="text-[10px] font-bold text-amber-700 bg-amber-50 px-1.5 rounded border border-amber-200">{qcWarnCount} QC warn</span>
+                <span className="text-[9px] font-bold text-amber-700 bg-amber-50 px-1 rounded border border-amber-200">{qcWarnCount} QC!</span>
+              )}
+              {status !== 'done' && requiredIds.length > 0 && (
+                <span className={cn('text-[9px]', blockedByDelivs ? 'text-red-500 font-black' : 'text-slate-400')}>
+                  {capturedCount}/{requiredIds.length} ev
+                </span>
               )}
             </div>
 
             {status === 'in_progress' && (
-              <div className="mt-2 h-1.5 bg-slate-200 rounded-full overflow-hidden">
+              <div className="mt-1 h-1 bg-slate-200 rounded-full overflow-hidden">
                 <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${completionPct}%` }} />
-              </div>
-            )}
-
-            {status !== 'done' && requiredIds.length > 0 && (
-              <div className="flex items-center gap-1.5 mt-1.5">
-                <span className="text-[10px] text-slate-400">{capturedCount}/{requiredIds.length} required</span>
-                {blockedByDelivs && status === 'in_progress' && (
-                  <span className="text-[10px] font-black text-red-500">· blocks completion</span>
-                )}
               </div>
             )}
           </div>
 
-          <ChevronDown className={cn('h-4 w-4 text-slate-300 flex-shrink-0 transition-transform mt-1', expanded && 'rotate-180')} />
+          <ChevronDown className={cn('h-3.5 w-3.5 text-slate-300 flex-shrink-0 transition-transform', expanded && 'rotate-180')} />
         </div>
       </button>
 
