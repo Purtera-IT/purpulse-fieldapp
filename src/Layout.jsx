@@ -5,12 +5,15 @@
  * Nav tabs: Jobs | Time | Chat | Support | Profile
  * Admin pages use AdminShell directly — no Layout wrapping.
  */
-import React from 'react';
+import React, { useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
 import { Briefcase, Clock, MessageCircle, HelpCircle, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import TopBar from './components/shell/TopBar';
+
+// Default density — can be overridden by appPublicSettings.density
+const APP_DENSITY = (typeof window !== 'undefined' && window.appPublicSettings?.density) || 'compact';
 
 const NAV_ITEMS = [
   { page: 'Jobs',    icon: Briefcase,      label: 'Jobs'    },
