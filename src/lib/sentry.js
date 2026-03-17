@@ -101,7 +101,7 @@ export function captureError(error, context = {}) {
  * Capture message (info, warning, error)
  */
 export function captureMessage(message, level = 'info', context = {}) {
-  if (!SENTRY_DSN) return;
+  if (!Sentry || !SENTRY_DSN) return;
   Sentry.captureMessage(message, level);
 }
 
