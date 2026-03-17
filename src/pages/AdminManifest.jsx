@@ -88,8 +88,9 @@ function fmtTs(ts) {
 // ── Main page ─────────────────────────────────────────────────────────
 export default function AdminManifest() {
   const qc = useQueryClient();
-  const [seedLog,      setSeedLog]      = useState([]);
+  const [seedLog,       setSeedLog]       = useState([]);
   const [activeSection, setActiveSection] = useState('metrics');
+  const [timelineJobId, setTimelineJobId] = useState('');
 
   // ── Data queries ──────────────────────────────────────────────────
   const { data: manifests = [],  isLoading: loadM } = useQuery({
