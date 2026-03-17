@@ -43,26 +43,69 @@ async function writeAudit(entry) {
 // ── Jobs Adapter ───────────────────────────────────────────────────────
 export class Base44JobsAdapter {
   async listJobs() {
-    return base44.entities.Job.list('-scheduled_date', 200);
+    try {
+      const data = await base44.entities.Job.list('-scheduled_date', 200);
+      const validated = validateJobs(data);
+      if (validated.length < data.length) {
+        console.warn(`[Jobs] Filtered ${data.length - validated.length} invalid job records`);
+      }
+      return validated;
+    } catch (err) {
+      console.error('[Jobs] listJobs failed:', err);
+      return [];
+    }
   }
+
   async getJob(id) {
-    const rows = await base44.entities.Job.filter({ id });
-    return rows[0] || null;
+    try {
+      const rows = await base44.entities.Job.filter({ id });
+      if (!rows || rows.length === 0) return null;
+      const result = validateJob(rows[0]);
+      if (result.success && result.data) {
+        return result.data;
+      }
+      console.error('[Jobs] getJob validation failed:', result.errors);
+      return null;
+    } catch (err) {
+      console.error('[Jobs] getJob failed:', err);
+      return null;
+    }
   }
+
   async updateJob(id, data, actorEmail = 'system') {
     const start = Date.now();
-    const result = await base44.entities.Job.update(id, data);
-    await writeAudit({
-      action_type: data.status ? 'job_status_change' : 'admin_bulk_action',
-      entity_type: 'job',
-      entity_id:   id,
-      actor_email: actorEmail,
-      actor_role:  'technician',
-      payload:     data,
-      job_id:      id,
-      duration_ms: Date.now() - start,
-    });
-    return result;
+    try {
+      const result = await base44.entities.Job.update(id, data);
+      const validated = validateJob(result);
+      if (!validated.success) {
+        console.warn('[Jobs] updateJob returned invalid data, storing partial:', validated.errors);
+      }
+
+      await writeAudit({
+        action_type: data.status ? 'job_status_change' : 'admin_bulk_action',
+        entity_type: 'job',
+        entity_id:   id,
+        actor_email: actorEmail,
+        actor_role:  'technician',
+        payload:     data,
+        job_id:      id,
+        duration_ms: Date.now() - start,
+      });
+
+      return validated.success ? validated.data : result;
+    } catch (err) {
+      console.error('[Jobs] updateJob failed:', err);
+      await writeAudit({
+        action_type: 'admin_bulk_action',
+        entity_type: 'job',
+        entity_id:   id,
+        actor_email: actorEmail,
+        result:      'error',
+        error_message: err instanceof Error ? err.message : 'Unknown error',
+        duration_ms: Date.now() - start,
+      });
+      throw err;
+    }
   }
 }
 
