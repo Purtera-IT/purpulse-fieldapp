@@ -17,7 +17,7 @@ import EvidenceGalleryView from '@/components/fieldv2/EvidenceGalleryView';
 import FieldTimeTracker from '@/components/fieldv2/FieldTimeTracker';
 import MeetingsTab      from '@/components/fieldv2/MeetingsTab';
 import AuditTab         from '@/components/fieldv2/AuditTab';
-import OfflineEditsIndicator from '@/components/fieldv2/OfflineEditsIndicator';
+import OfflineEditsIndicator from '@/components/fieldv2/OfflineEditsIndicator.jsx';
 import UploadProgressIndicator from '@/components/fieldv2/UploadProgressIndicator';
 
 const TABS = [
