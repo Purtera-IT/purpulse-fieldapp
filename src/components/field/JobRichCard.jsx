@@ -115,15 +115,15 @@ export default function JobRichCard({ job }) {
   const delivWarning = deliv > 0 && isScheduledToday;
 
   return (
-    <div className={cn('bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden border-l-4', prio.borderClass)}>
+    <div className={cn('bg-white rounded-[8px] border border-slate-100 shadow-[0_2px_6px_rgba(15,23,36,0.06)] overflow-hidden border-l-4', prio.borderClass)}>
 
       {/* ── Top strip ─────────────────────────────────────── */}
       <div className="flex items-center gap-2 px-4 pt-3 pb-2 flex-wrap">
-        <span className={cn('flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-black', prio.badgeClass)}>
+        <span className={cn('flex items-center gap-1 px-2 py-0.5 rounded-[4px] text-[10px] font-black', prio.badgeClass)}>
           {PrioIcon && <PrioIcon className="h-2.5 w-2.5" />}
           {prio.label.toUpperCase()}
         </span>
-        <span className={cn('flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold', statusCfg.badgeClass)}>
+        <span className={cn('flex items-center gap-1.5 px-2.5 py-0.5 rounded-[4px] text-[10px] font-bold', statusCfg.badgeClass)}>
           <span className={cn('h-1.5 w-1.5 rounded-full', statusCfg.dotClass)} />
           {statusCfg.label}
         </span>
@@ -134,7 +134,7 @@ export default function JobRichCard({ job }) {
           />
           {job.in_geofence ? (
             <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600">
-              <span className="h-2 w-2 rounded-full bg-emerald-500 motion-safe:animate-pulse" />
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
               On-site
             </span>
           ) : (
@@ -218,7 +218,7 @@ export default function JobRichCard({ job }) {
             />
           </div>
         </div>
-        <div className={cn('flex items-center gap-1.5 px-3 py-2 rounded-xl flex-shrink-0',
+        <div className={cn('flex items-center gap-1.5 px-3 py-2 rounded-[6px] flex-shrink-0',
           deliv === 0 ? 'bg-emerald-50' : delivWarning ? 'bg-red-50' : 'bg-amber-50'
         )}>
           <Package className={cn('h-3.5 w-3.5',
@@ -237,7 +237,7 @@ export default function JobRichCard({ job }) {
         <Link
           to={`/JobDetail?id=${job.id}`}
           className={cn(
-            'flex items-center justify-center gap-2 flex-1 h-12 rounded-xl font-bold text-sm active:opacity-80 transition-opacity',
+            'flex items-center justify-center gap-2 flex-1 h-11 rounded-[8px] font-bold text-sm active:opacity-80 transition-opacity',
             getCtaBg(job.status)
           )}
         >
@@ -248,7 +248,7 @@ export default function JobRichCard({ job }) {
         {['in_progress', 'checked_in', 'paused'].includes(job.status) && (
           <Link
             to={`/JobDetail?id=${job.id}&tab=tasks`}
-            className="h-12 w-12 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0 active:bg-slate-200 transition-colors"
+            className="h-11 w-11 rounded-[8px] bg-slate-100 flex items-center justify-center flex-shrink-0 active:bg-slate-200 transition-colors"
             aria-label="Go to tasks"
             title="Jump to Tasks"
           >
