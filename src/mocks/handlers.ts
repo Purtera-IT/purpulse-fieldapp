@@ -168,5 +168,24 @@ export const handlers = [
     return HttpResponse.json({ success: true });
   }),
 
+  // POST /api/auth/refresh — Mock token refresh
+  http.post('/api/auth/refresh', async ({ request }) => {
+    await scenarioDelay();
+
+    if (currentScenario === 'error') {
+      return HttpResponse.json(
+        { error: 'Token refresh failed' },
+        { status: 401 }
+      );
+    }
+
+    const body = await request.json();
+    return HttpResponse.json({
+      accessToken: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIiwiZXhwIjoyNTI0NjA4MDAwfQ.new_token_refresh',
+      refreshToken: body.refreshToken,
+      expiresIn: 3600,
+    });
+  }),
+
   ...uploadHandlers,
 ];
