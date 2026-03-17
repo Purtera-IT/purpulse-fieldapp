@@ -188,7 +188,6 @@ export default function JobDetail() {
           >
             <span className="h-1.5 w-1.5 rounded-full bg-emerald-300 motion-safe:animate-pulse flex-shrink-0" />
             <TimerPanel jobId={job.id} statusLabel={statusLabel} compact />
-            <span className="text-[10px] opacity-60 ml-auto flex-shrink-0">tap →</span>
           </div>
         )}
 
