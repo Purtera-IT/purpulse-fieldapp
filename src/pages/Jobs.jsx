@@ -4,21 +4,20 @@ import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseISO, isToday, isTomorrow, isWithinInterval, startOfWeek, endOfWeek } from 'date-fns';
 import {
-  Search, Loader2, LayoutGrid, List, CalendarDays, Table2,
+  Loader2, LayoutGrid, List, CalendarDays, Table2,
   SlidersHorizontal, X, ChevronRight, WifiOff, RefreshCw, Camera,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
-import { Input } from '@/components/ui/input';
 import OfflineBanner from '../components/field/OfflineBanner';
 import JobRichCard, { PRIORITY_CFG, STATUS_CFG, getProgress, formatSchedule } from '../components/field/JobRichCard';
 import JobsListRow from '../components/field/JobsListRow';
 import JobsCalendar from '../components/field/JobsCalendar';
 import JobsTable from '../components/field/JobsTable';
-import FilterToggle from '../components/ui/FilterToggle';
 import { useJobQueue } from '../hooks/useJobQueue';
 import { MOCK_JOBS } from '../lib/mockJobs';
 import ActiveJobHero from '../components/field/ActiveJobHero';
+import JobsHeader from '../components/JobsHeader';
 
 // ── Filter definitions ───────────────────────────────────────────────
 const STATUS_CHIPS = [
