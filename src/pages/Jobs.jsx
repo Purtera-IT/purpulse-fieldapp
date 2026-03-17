@@ -128,7 +128,8 @@ function EmptyState({ isOnline }) {
 
 // ── Main page ────────────────────────────────────────────────────────
 export default function Jobs() {
-  const [view,           setView]           = useState(() => localStorage.getItem('purpulse_jobs_view') || 'cards');
+  const isDesktop = typeof window !== 'undefined' && window.innerWidth >= 1024;
+  const [view,           setView]           = useState(() => localStorage.getItem('purpulse_jobs_view') || (isDesktop ? 'table' : 'cards'));
   const [search,         setSearch]         = useState('');
   const [statusFilter,   setStatusFilter]   = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
@@ -136,6 +137,14 @@ export default function Jobs() {
   const [techFilter,     setTechFilter]     = useState('all');
   const [showAdvanced,   setShowAdvanced]   = useState(false);
   const [isRefreshing,   setIsRefreshing]   = useState(false);
+  // Table paging/sort
+  const [tablePage,      setTablePage]      = useState(0);
+  const TABLE_PAGE_SIZE = 25;
+  const [tableSort,      setTableSort]      = useState({ col: 'scheduled_date', dir: 'desc' });
+  const handleTableSort = (col) => {
+    setTableSort(prev => ({ col, dir: prev.col === col && prev.dir === 'asc' ? 'desc' : 'asc' }));
+    setTablePage(0);
+  };
 
   const queryClient = useQueryClient();
   const listRef     = useRef(null);
