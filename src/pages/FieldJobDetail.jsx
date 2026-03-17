@@ -9,6 +9,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { apiClient } from '@/api/client';
+import { jobRepository } from '@/lib/repositories/jobRepository';
 
 import JobOverview      from '@/components/fieldv2/JobOverview';
 import RunbookSteps     from '@/components/fieldv2/RunbookSteps';
@@ -41,7 +42,7 @@ export default function FieldJobDetail() {
   /* ── Data queries ────────────────────────────────────────────────── */
   const { data: job, isLoading } = useQuery({
     queryKey: ['fj-job', jobId],
-    queryFn:  () => jobId ? apiClient.getJob(jobId) : Promise.resolve(null),
+    queryFn:  () => jobId ? jobRepository.getJob(jobId) : Promise.resolve(null),
     enabled:  !!jobId,
     staleTime: 30_000,
   });
