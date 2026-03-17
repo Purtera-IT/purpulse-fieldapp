@@ -8,8 +8,7 @@ import { Link } from 'react-router-dom';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowLeft, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { base44 } from '@/api/base44Client';
-import { defaultAdapters } from '@/lib/fieldAdapters';
+import { apiClient } from '@/api/client';
 
 import JobOverview      from '@/components/fieldv2/JobOverview';
 import RunbookSteps     from '@/components/fieldv2/RunbookSteps';
@@ -32,7 +31,7 @@ const STATUS_DOT = {
   checked_in:  'bg-purple-500', en_route: 'bg-cyan-500',
 };
 
-export default function FieldJobDetail({ adapters = defaultAdapters }) {
+export default function FieldJobDetail() {
   const urlParams = new URLSearchParams(window.location.search);
   const jobId     = urlParams.get('id');
   const initTab   = urlParams.get('tab') || 'overview';
@@ -42,39 +41,39 @@ export default function FieldJobDetail({ adapters = defaultAdapters }) {
   /* ── Data queries ────────────────────────────────────────────────── */
   const { data: job, isLoading } = useQuery({
     queryKey: ['fj-job', jobId],
-    queryFn:  async () => { const r = await base44.entities.Job.filter({ id: jobId }); return r[0] || null; },
+    queryFn:  () => apiClient.getJob(jobId!),
     enabled:  !!jobId,
     staleTime: 30_000,
   });
 
   const { data: evidence = [] } = useQuery({
     queryKey: ['fj-evidence', jobId],
-    queryFn:  () => base44.entities.Evidence.filter({ job_id: jobId }, '-captured_at', 200),
+    queryFn:  () => apiClient.getEvidence(jobId!),
     enabled:  !!jobId,
   });
 
   const { data: labels = [] } = useQuery({
     queryKey: ['fj-labels', jobId],
-    queryFn:  () => base44.entities.LabelRecord.filter({ job_id: jobId }, '-labeled_at', 200),
+    queryFn:  () => apiClient.getLabels(jobId!),
     enabled:  !!jobId,
   });
 
   const { data: meetings = [] } = useQuery({
     queryKey: ['fj-meetings', jobId],
-    queryFn:  () => base44.entities.Meeting.filter({ job_id: jobId }, '-scheduled_at', 50),
+    queryFn:  () => apiClient.getMeetings(jobId!),
     enabled:  !!jobId,
   });
 
   const { data: activities = [] } = useQuery({
     queryKey: ['fj-activities', jobId],
-    queryFn:  () => base44.entities.Activity.filter({ work_order_id: jobId }, '-timestamp', 100),
-    enabled:  !!jobId,
+    queryFn:  () => [],
+    enabled:  false,
   });
 
   const { data: auditLogs = [] } = useQuery({
     queryKey: ['fj-audit', jobId],
-    queryFn:  () => base44.entities.AuditLog.filter({ job_id: jobId }, '-client_ts', 100),
-    enabled:  !!jobId,
+    queryFn:  () => [],
+    enabled:  false,
   });
 
   const invalidateAll = () => {
@@ -91,7 +90,7 @@ export default function FieldJobDetail({ adapters = defaultAdapters }) {
   );
   if (!job) return <div className="p-10 text-center text-slate-400 text-sm">Job not found</div>;
 
-  const tabProps = { job, evidence, labels, meetings, activities, auditLogs, adapters, onRefresh: invalidateAll };
+  const tabProps = { job, evidence, labels, meetings, activities, auditLogs, onRefresh: invalidateAll };
   const activeDot = STATUS_DOT[job.status];
 
   return (
