@@ -255,20 +255,20 @@ export default function TaskCard({ task, phaseColor, orderNum, isPhaseUnlocked, 
           )}
 
           {/* Actions */}
-          <div className="px-4 py-3 flex gap-2">
+          <div className="px-3 py-2 flex gap-1.5">
             <button
               onClick={() => onEscalate?.(task)}
-              className="flex items-center gap-1.5 h-11 px-3 rounded-xl border border-red-200 text-red-600 text-xs font-bold flex-shrink-0 active:bg-red-50"
+              className="flex items-center gap-1 h-8 px-2.5 rounded-[6px] border border-red-200 text-red-600 text-[11px] font-bold flex-shrink-0 active:bg-red-50"
             >
-              <AlertOctagon className="h-3.5 w-3.5" /> Escalate
+              <AlertOctagon className="h-3 w-3" /> Escalate
             </button>
 
             {status === 'pending' && isPhaseUnlocked && (
               <button
                 onClick={handleStart}
-                className="flex-1 h-11 rounded-xl bg-blue-600 text-white font-bold text-sm active:opacity-80 flex items-center justify-center gap-2"
+                className="flex-1 h-8 rounded-[6px] bg-[#0B66B2] text-white font-bold text-[11px] active:opacity-80 flex items-center justify-center gap-1.5"
               >
-                <PlayCircle className="h-4 w-4" /> Begin Task
+                <PlayCircle className="h-3.5 w-3.5" /> Begin
               </button>
             )}
 
@@ -277,7 +277,7 @@ export default function TaskCard({ task, phaseColor, orderNum, isPhaseUnlocked, 
                 onClick={handleComplete}
                 disabled={!canComplete}
                 className={cn(
-                  'flex-1 h-11 rounded-xl font-bold text-sm flex items-center justify-center gap-2 transition-all',
+                  'flex-1 h-8 rounded-[6px] font-bold text-[11px] flex items-center justify-center gap-1.5 transition-all',
                   canComplete
                     ? 'bg-emerald-600 text-white active:opacity-80'
                     : 'bg-slate-100 text-slate-400 cursor-not-allowed'
@@ -285,15 +285,15 @@ export default function TaskCard({ task, phaseColor, orderNum, isPhaseUnlocked, 
                 title={!canComplete ? 'Capture all required deliverables and check all items first' : undefined}
               >
                 {canComplete
-                  ? <><CheckCircle2 className="h-4 w-4" /> Mark Complete</>
-                  : <><ClipboardCheck className="h-4 w-4" /> Deliverables Incomplete</>
+                  ? <><CheckCircle2 className="h-3.5 w-3.5" /> Complete</>
+                  : <><ClipboardCheck className="h-3.5 w-3.5" /> Missing deliverables</>
                 }
               </button>
             )}
 
             {status === 'done' && (
-              <div className="flex-1 h-11 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-sm flex items-center justify-center gap-2">
-                <CheckCircle2 className="h-4 w-4" /> Complete
+              <div className="flex-1 h-8 rounded-[6px] bg-emerald-50 border border-emerald-200 text-emerald-700 font-bold text-[11px] flex items-center justify-center gap-1.5">
+                <CheckCircle2 className="h-3.5 w-3.5" /> Complete
               </div>
             )}
           </div>
