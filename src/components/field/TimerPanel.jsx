@@ -265,10 +265,7 @@ export default function TimerPanel({ jobId, statusLabel, compact = false }) {
           )}
         </div>
 
-        {/* Accessibility hint — visually hidden */}
-        <p className="sr-only" aria-hidden="true">
-          All controls reachable one-handed
-        </p>
+
       </div>
 
       {showStop && (
