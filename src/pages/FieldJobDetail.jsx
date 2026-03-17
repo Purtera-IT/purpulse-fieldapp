@@ -18,6 +18,7 @@ import FieldTimeTracker from '@/components/fieldv2/FieldTimeTracker';
 import MeetingsTab      from '@/components/fieldv2/MeetingsTab';
 import AuditTab         from '@/components/fieldv2/AuditTab';
 import OfflineEditsIndicator from '@/components/fieldv2/OfflineEditsIndicator';
+import UploadProgressIndicator from '@/components/fieldv2/UploadProgressIndicator';
 
 const TABS = [
   { id: 'overview',  label: 'Overview'  },
@@ -147,6 +148,7 @@ export default function FieldJobDetail() {
       {/* ── Tab content ────────────────────────────────────────────── */}
       <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-4 pb-10 space-y-4">
         <OfflineEditsIndicator jobId={jobId} isOnline={isOnline} />
+        <UploadProgressIndicator jobId={jobId} isOnline={isOnline} />
         <div>
           {tab === 'overview'  && <JobOverview       {...tabProps} />}
           {tab === 'runbook'   && <RunbookSteps       {...tabProps} />}
