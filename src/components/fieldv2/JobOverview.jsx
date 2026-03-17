@@ -142,6 +142,15 @@ export default function JobOverview({ job, evidence, labels, onRefresh }) {
         </div>
       </Card>
 
+      {/* State Machine */}
+      <JobStateTransitioner
+        job={job}
+        evidence={evidence}
+        runbookComplete={runbookComplete}
+        hasSignature={hasSignature}
+        onTransitionSuccess={onRefresh}
+      />
+
       {/* Hazards */}
       {job.hazards && (
         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
