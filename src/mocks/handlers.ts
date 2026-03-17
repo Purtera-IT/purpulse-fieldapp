@@ -1,4 +1,5 @@
 import { http, HttpResponse, delay } from 'msw';
+import { uploadHandlers } from './handlers-upload';
 import jobs from './fixtures/jobs.json';
 import technicians from './fixtures/technicians.json';
 import assets from './fixtures/assets.json';
