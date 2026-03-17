@@ -7,7 +7,7 @@ import React, { useState, useCallback } from 'react';
 import {
   ChevronDown, ChevronUp, Clock, CheckCircle2, AlertOctagon,
   Circle, PlayCircle, XCircle, Lightbulb, ClipboardCheck,
-  ChevronRight,
+  ChevronRight, Camera, AlertCircle,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
