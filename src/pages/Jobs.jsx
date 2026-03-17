@@ -4,7 +4,7 @@ import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseISO, isToday, isTomorrow, isWithinInterval, startOfWeek, endOfWeek } from 'date-fns';
 import {
-  Search, Loader2, LayoutGrid, List, CalendarDays,
+  Search, Loader2, LayoutGrid, List, CalendarDays, Table2,
   SlidersHorizontal, X, ChevronRight, WifiOff, RefreshCw, Camera,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
