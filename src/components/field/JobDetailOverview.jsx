@@ -19,15 +19,16 @@ const SYNC_CFG = {
   error:   { Icon: CloudOff,  cls: 'text-red-500',     label: 'Sync Error' },
 };
 
-function InfoRow({ icon: Icon, label, children, href, iconCls = 'text-slate-400' }) {
+// dense=true tightens padding/font for the left column
+function InfoRow({ icon: Icon, label, children, href, iconCls = 'text-slate-400', dense }) {
   const inner = (
-    <div className="flex items-start gap-3">
-      <div className="h-8 w-8 rounded-xl bg-slate-50 flex items-center justify-center flex-shrink-0 mt-0.5">
-        <Icon className={cn('h-4 w-4', iconCls)} />
+    <div className={cn('flex items-start gap-2', dense ? '' : 'gap-3')}>
+      <div className={cn('rounded-[6px] bg-slate-50 flex items-center justify-center flex-shrink-0 mt-0.5', dense ? 'h-6 w-6' : 'h-8 w-8 rounded-xl')}>
+        <Icon className={cn(dense ? 'h-3 w-3' : 'h-4 w-4', iconCls)} />
       </div>
       <div className="flex-1 min-w-0">
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-0.5">{label}</p>
-        <div className="text-sm text-slate-700 font-semibold leading-snug">{children}</div>
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest mb-px">{label}</p>
+        <div className={cn('text-slate-700 font-semibold leading-snug', dense ? 'text-xs' : 'text-sm')}>{children}</div>
       </div>
     </div>
   );
@@ -35,13 +36,13 @@ function InfoRow({ icon: Icon, label, children, href, iconCls = 'text-slate-400'
   return <div>{inner}</div>;
 }
 
-function SectionCard({ title, children }) {
+function SectionCard({ title, children, dense }) {
   return (
-    <div className="bg-white rounded-2xl border border-slate-100 overflow-hidden">
-      <div className="px-4 py-3 border-b border-slate-50">
-        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
+    <div className={cn('bg-white border border-slate-100 overflow-hidden', dense ? 'rounded-[8px]' : 'rounded-2xl')}>
+      <div className={cn('border-b border-slate-50', dense ? 'px-3 py-2' : 'px-4 py-3')}>
+        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
       </div>
-      <div className="p-4 space-y-4">{children}</div>
+      <div className={cn(dense ? 'p-3 space-y-3' : 'p-4 space-y-4')}>{children}</div>
     </div>
   );
 }
