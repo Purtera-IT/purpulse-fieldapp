@@ -38,6 +38,10 @@ export const AuthProvider = ({ children }) => {
         const publicSettings = await appClient.get(`/prod/public-settings/by-id/${appParams.appId}`);
         setAppPublicSettings(publicSettings);
         
+        // Check if offline mode is allowed by app config
+        const offlineModeAllowed = publicSettings?.offline_mode_enabled === true;
+        setOfflineModeAllowed(offlineModeAllowed);
+        
         // If we got the app public settings successfully, check if user is authenticated
         if (appParams.token) {
           await checkUserAuth();
