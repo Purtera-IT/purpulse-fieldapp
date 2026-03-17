@@ -136,6 +136,8 @@ export const AuthProvider = ({ children }) => {
   const logout = (shouldRedirect = true) => {
     setUser(null);
     setIsAuthenticated(false);
+    setAuthError(null);
+    clearOfflineCache(); // Clean up offline data
     
     if (shouldRedirect) {
       // Use the SDK's logout method which handles token cleanup and redirect
