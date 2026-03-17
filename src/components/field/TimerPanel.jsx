@@ -248,9 +248,8 @@ export default function TimerPanel({ jobId, statusLabel, compact = false }) {
             <>
               <button
                 onClick={() => fire('travel_start', 'Travel started')}
-                className="h-12 w-11 rounded-md bg-white/70 text-blue-600 flex items-center justify-center active:opacity-70 flex-shrink-0 border border-blue-200"
+                className="h-12 w-12 rounded-md bg-white/70 text-blue-600 flex items-center justify-center active:opacity-70 flex-shrink-0 border border-blue-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
                 aria-label="Start travel"
-                title="Start travel"
               >
                 <Car className="h-4 w-4" aria-hidden="true" />
               </button>
