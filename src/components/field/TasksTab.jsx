@@ -112,31 +112,31 @@ export default function TasksTab({ job }) {
         const phaseBlocking = phase.tasks.filter(t => t.gate === 'blocking' && t.status !== 'done').length;
 
         return (
-          <div key={phase.id} className="mb-4">
+          <div key={phase.id} className="mb-2">
             {/* Phase header */}
             <button
               onClick={() => togglePhase(phase.id)}
               className={cn(
-                'w-full flex items-center gap-3 px-4 py-3 rounded-2xl border mb-2 transition-all text-left',
+                'w-full flex items-center gap-2 px-3 py-2 rounded-[6px] border mb-1 transition-all text-left',
                 phaseDone ? 'bg-emerald-50 border-emerald-200' : unlocked ? cn(color.bg, 'border', color.ring) : 'bg-slate-100 border-slate-200 opacity-70'
               )}
             >
               {/* Phase number */}
               <div className={cn(
-                'h-8 w-8 rounded-xl flex items-center justify-center font-black text-sm flex-shrink-0',
+                'h-6 w-6 rounded-[4px] flex items-center justify-center font-black text-[10px] flex-shrink-0',
                 phaseDone ? 'bg-emerald-500 text-white' : unlocked ? cn(color.bar, 'text-white') : 'bg-slate-300 text-white'
               )}>
-                {phaseDone ? <CheckCircle2 className="h-4 w-4" /> : phase.order}
+                {phaseDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : phase.order}
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2 mb-1">
-                  <p className={cn('text-sm font-black', phaseDone ? 'text-emerald-700' : !unlocked ? 'text-slate-400' : color.text)}>
+                <div className="flex items-center gap-1.5 mb-0.5">
+                  <p className={cn('text-xs font-black', phaseDone ? 'text-emerald-700' : !unlocked ? 'text-slate-400' : color.text)}>
                     {phase.name}
                   </p>
-                  {!unlocked && <Lock className="h-3.5 w-3.5 text-slate-400" />}
+                  {!unlocked && <Lock className="h-3 w-3 text-slate-400" />}
                   {phaseBlocking > 0 && !phaseDone && (
-                    <span className="text-[9px] font-black text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-200">
+                    <span className="text-[9px] font-black text-red-600 bg-red-50 px-1 py-px rounded border border-red-200">
                       {phaseBlocking} blocking
                     </span>
                   )}
@@ -145,14 +145,14 @@ export default function TasksTab({ job }) {
               </div>
 
               {collapsed
-                ? <ChevronDown className="h-4 w-4 text-slate-400 flex-shrink-0" />
-                : <ChevronUp   className="h-4 w-4 text-slate-400 flex-shrink-0" />
+                ? <ChevronDown className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                : <ChevronUp   className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
               }
             </button>
 
             {/* Phase tasks */}
             {!collapsed && (
-              <div className="space-y-2 pl-2">
+              <div className="space-y-1 pl-1">
                 {phase.tasks.map((task) => {
                   globalOrder++;
                   const order = globalOrder;
