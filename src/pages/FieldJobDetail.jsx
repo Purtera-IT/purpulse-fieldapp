@@ -17,6 +17,7 @@ import EvidenceGalleryView from '@/components/fieldv2/EvidenceGalleryView';
 import FieldTimeTracker from '@/components/fieldv2/FieldTimeTracker';
 import MeetingsTab      from '@/components/fieldv2/MeetingsTab';
 import AuditTab         from '@/components/fieldv2/AuditTab';
+import OfflineEditsIndicator from '@/components/fieldv2/OfflineEditsIndicator';
 
 const TABS = [
   { id: 'overview',  label: 'Overview'  },
@@ -37,7 +38,20 @@ export default function FieldJobDetail() {
   const jobId     = urlParams.get('id');
   const initTab   = urlParams.get('tab') || 'overview';
   const [tab, setTab] = useState(initTab);
+  const [isOnline, setIsOnline] = useState(navigator.onLine);
   const qc = useQueryClient();
+
+  // Track online/offline status
+  React.useEffect(() => {
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+    window.addEventListener('online', handleOnline);
+    window.addEventListener('offline', handleOffline);
+    return () => {
+      window.removeEventListener('online', handleOnline);
+      window.removeEventListener('offline', handleOffline);
+    };
+  }, []);
 
   /* ── Data queries ────────────────────────────────────────────────── */
   const { data: job, isLoading } = useQuery({
@@ -131,13 +145,16 @@ export default function FieldJobDetail() {
       </div>
 
       {/* ── Tab content ────────────────────────────────────────────── */}
-      <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-4 pb-10">
-        {tab === 'overview'  && <JobOverview       {...tabProps} />}
-        {tab === 'runbook'   && <RunbookSteps       {...tabProps} />}
-        {tab === 'evidence'  && <EvidenceGalleryView {...tabProps} />}
-        {tab === 'timelog'   && <FieldTimeTracker    {...tabProps} />}
-        {tab === 'meetings'  && <MeetingsTab         {...tabProps} />}
-        {tab === 'audit'     && <AuditTab            {...tabProps} />}
+      <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-4 pb-10 space-y-4">
+        <OfflineEditsIndicator jobId={jobId} isOnline={isOnline} />
+        <div>
+          {tab === 'overview'  && <JobOverview       {...tabProps} />}
+          {tab === 'runbook'   && <RunbookSteps       {...tabProps} />}
+          {tab === 'evidence'  && <EvidenceGalleryView {...tabProps} />}
+          {tab === 'timelog'   && <FieldTimeTracker    {...tabProps} />}
+          {tab === 'meetings'  && <MeetingsTab         {...tabProps} />}
+          {tab === 'audit'     && <AuditTab            {...tabProps} />}
+        </div>
       </div>
     </div>
   );
