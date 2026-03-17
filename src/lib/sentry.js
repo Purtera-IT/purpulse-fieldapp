@@ -87,7 +87,7 @@ export function initSentry() {
  * Capture exception with context
  */
 export function captureError(error, context = {}) {
-  if (!SENTRY_DSN) return;
+  if (!Sentry || !SENTRY_DSN) return;
   Sentry.captureException(error, {
     tags: {
       severity: context.severity || 'error',
