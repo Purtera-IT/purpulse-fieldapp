@@ -56,10 +56,18 @@ function Card({ title, children }) {
 
 function fmtTs(ts) { try { return format(parseISO(ts), 'MMM d, yyyy HH:mm'); } catch { return ts || '—'; } }
 
-export default function JobOverview({ job, evidence, adapters, onRefresh }) {
+export default function JobOverview({ job, evidence, labels, onRefresh }) {
   const [snapshotting, setSnapshotting] = useState(false);
   const { permissions } = useAuth();
   const qc = useQueryClient();
+
+  // Determine if runbook is complete
+  const runbookComplete = job?.runbook_phases?.every(phase =>
+    phase.steps?.every(step => step.completed)
+  ) ?? false;
+
+  // Check if signature is present
+  const hasSignature = !!job?.signoff_signature_url;
 
   const updateMutation = useMutation({
     mutationFn: async ({ status }) => {
