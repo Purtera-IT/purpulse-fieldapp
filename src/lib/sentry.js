@@ -109,7 +109,7 @@ export function captureMessage(message, level = 'info', context = {}) {
  * Set user context (call after login)
  */
 export function setUserContext(user) {
-  if (!SENTRY_DSN) return;
+  if (!Sentry || !SENTRY_DSN) return;
   if (!user) {
     Sentry.setUser(null);
     return;
