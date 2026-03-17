@@ -140,6 +140,14 @@ export default function TimerPanel({ jobId, statusLabel, compact = false }) {
     if (type === 'work_start' || type === 'break_end' || type === 'travel_end') haptic('success');
     else if (type === 'break_start') haptic('warning');
     else if (type === 'travel_start') haptic('tap');
+    
+    // Track telemetry
+    if (type.endsWith('_start')) {
+      telemetryTimeClockStart(jobId, type);
+    } else if (type.endsWith('_stop') || type.endsWith('_end')) {
+      telemetryTimeClockStop(jobId, type, calcWork(entries));
+    }
+    
     createEntry.mutate(type);
     toast.success(successMsg, { duration: 2500 });
   };
