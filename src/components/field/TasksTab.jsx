@@ -127,36 +127,52 @@ export default function TasksTab({ job }) {
             <button
               onClick={() => togglePhase(phase.id)}
               className={cn(
-                'w-full flex items-center gap-2 px-3 py-2 rounded-[6px] border mb-1 transition-all text-left',
+                'w-full flex items-center gap-2 px-3 py-1.5 rounded-[6px] border mb-1 transition-all text-left',
                 phaseDone ? 'bg-emerald-50 border-emerald-200' : unlocked ? cn(color.bg, 'border', color.ring) : 'bg-slate-100 border-slate-200 opacity-70'
               )}
             >
               {/* Phase number */}
               <div className={cn(
-                'h-6 w-6 rounded-[4px] flex items-center justify-center font-black text-[10px] flex-shrink-0',
+                'h-5 w-5 rounded-[3px] flex items-center justify-center font-black text-[9px] flex-shrink-0',
                 phaseDone ? 'bg-emerald-500 text-white' : unlocked ? cn(color.bar, 'text-white') : 'bg-slate-300 text-white'
               )}>
-                {phaseDone ? <CheckCircle2 className="h-3.5 w-3.5" /> : phase.order}
+                {phaseDone ? <CheckCircle2 className="h-3 w-3" /> : phase.order}
               </div>
 
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1.5 mb-0.5">
-                  <p className={cn('text-xs font-black', phaseDone ? 'text-emerald-700' : !unlocked ? 'text-slate-400' : color.text)}>
+                <div className="flex items-center gap-1 mb-0.5">
+                  <p className={cn('text-[12px] font-bold', phaseDone ? 'text-emerald-700' : !unlocked ? 'text-slate-400' : color.text)}>
                     {phase.name}
                   </p>
-                  {!unlocked && <Lock className="h-3 w-3 text-slate-400" />}
+                  {!unlocked && !phaseOverrides[phaseIdx] && <Lock className="h-2.5 w-2.5 text-slate-400" />}
                   {phaseBlocking > 0 && !phaseDone && (
-                    <span className="text-[9px] font-black text-red-600 bg-red-50 px-1 py-px rounded border border-red-200">
-                      {phaseBlocking} blocking
+                    <span className="inline-flex items-center gap-0.5 text-[8px] font-black text-white bg-red-600 px-1.5 py-0.5 rounded-full flex-shrink-0">
+                      {phaseBlocking}
                     </span>
+                  )}
+                  {phaseOverrides[phaseIdx] && (
+                    <span className="text-[8px] font-black text-amber-600 bg-amber-100 px-1 py-px rounded border border-amber-300">OVERRIDE</span>
                   )}
                 </div>
                 <PhaseProgressBar tasks={phase.tasks} />
               </div>
 
+              {!unlocked && !phaseDone && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setOverrideTask({ phaseIdx, name: phase.name });
+                  }}
+                  className="h-7 px-2 rounded-md bg-red-50 border border-red-200 text-red-600 text-[10px] font-bold flex items-center gap-1 active:opacity-80 flex-shrink-0 hover:bg-red-100 transition-colors"
+                  title="Unlock phase with documented reason"
+                >
+                  <ShieldAlert className="h-3 w-3" /> Override
+                </button>
+              )}
+
               {collapsed
-                ? <ChevronDown className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
-                : <ChevronUp   className="h-3.5 w-3.5 text-slate-400 flex-shrink-0" />
+                ? <ChevronDown className="h-3 w-3 text-slate-400 flex-shrink-0" />
+                : <ChevronUp   className="h-3 w-3 text-slate-400 flex-shrink-0" />
               }
             </button>
 
