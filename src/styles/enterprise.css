@@ -93,6 +93,13 @@
 .theme-enterprise a,
 .theme-enterprise [role="button"] { min-height: var(--ent-touch); }
 
+/* ── Timer pill ───────────────────────────────────────────────────── */
+.timer-pill {
+  border-radius: var(--ent-radius-md);
+  box-shadow: none;
+  background: var(--ent-neutral-50);
+}
+
 /* ── .density-compact — tighten spacing & font sizes ──────────────── */
 .density-compact {
   --ent-space-xs:      2px;
