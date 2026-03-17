@@ -72,6 +72,10 @@ export default function EvidenceCapture({ jobId, evidenceType, stepId, onCapture
 
   const handleGalleryQueue = (items) => {
     items.forEach(({ file, metadata }) => {
+      // Track telemetry for each file
+      const fileSizeKB = Math.round(file?.size / 1024 || 0);
+      telemetryEvidenceUploadStart(jobId, metadata.evidence_type || 'gallery', fileSizeKB);
+      
       addToQueue(
         [file],
         { ...metadata, runbook_step_id: stepId || null },
