@@ -405,8 +405,8 @@ export default function Jobs() {
             {filtered.map(job => <JobRichCard key={job.id} job={job} />)}
           </div>
         ) : view === 'list' ? (
-          <div className="space-y-2">
-            {filtered.map(job => <JobListRow key={job.id} job={job} />)}
+          <div className="space-y-1">
+            {filtered.map(job => <JobsListRow key={job.id} job={job} />)}
           </div>
         ) : (
           <JobsCalendar jobs={filtered} />
