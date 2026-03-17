@@ -315,9 +315,22 @@ export class Base44MeetingAdapter {
 
 // ── Audit Adapter ──────────────────────────────────────────────────────
 export class Base44AuditAdapter {
-  async log(entry) { return writeAudit(entry); }
+  async log(entry) {
+    return writeAudit(entry);
+  }
+
   async list(jobId) {
-    return base44.entities.AuditLog.filter({ job_id: jobId }, '-client_ts', 100);
+    try {
+      const data = await base44.entities.AuditLog.filter({ job_id: jobId }, '-client_ts', 100);
+      const validated = validateAuditLogList(data);
+      if (validated.length < data.length) {
+        console.warn(`[Audit] Filtered ${data.length - validated.length} invalid audit records`);
+      }
+      return validated;
+    } catch (err) {
+      console.error('[Audit] list failed:', err);
+      return [];
+    }
   }
 }
 
