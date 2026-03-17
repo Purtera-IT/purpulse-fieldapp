@@ -57,6 +57,7 @@ function fmtTs(ts) { try { return format(parseISO(ts), 'MMM d, yyyy HH:mm'); } c
 
 export default function JobOverview({ job, evidence, adapters, onRefresh }) {
   const [snapshotting, setSnapshotting] = useState(false);
+  const { permissions } = useAuth();
   const qc = useQueryClient();
 
   const updateMutation = useMutation({
