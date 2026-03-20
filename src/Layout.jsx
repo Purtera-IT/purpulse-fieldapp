@@ -57,8 +57,6 @@ export default function Layout({ children, currentPageName }) {
 
   return (
     <div className="min-h-screen bg-slate-50 flex flex-col">
-      <a href="#main-content" className="skip-link">Skip to main content</a>
-
       {/* ── Page Content ─────────────────────────────── */}
       <main id="main-content" className="flex-1">
         {children}
