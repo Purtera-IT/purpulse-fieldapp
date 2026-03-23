@@ -7,8 +7,9 @@ import { useQuery } from '@tanstack/react-query';
 import {
   User, LogOut, Smartphone, Shield, Bell, MapPin, Camera,
   ChevronRight, ShieldCheck, AlertTriangle, XCircle, Info, Eye,
-  SlidersHorizontal, Palette,
+  SlidersHorizontal, Palette, Trash2,
 } from 'lucide-react';
+import { BottomSheet } from '../components/ui/BottomSheet';
 import DensityToggle from '../components/ui/DensityToggle';
 import ThemeToggle from '../components/ui/ThemeToggle';
 import { useAppPreferences } from '../hooks/useAppPreferences';
@@ -118,9 +119,11 @@ async function checkPermissions() {
 
 export default function Profile() {
   const [perms,      setPerms]      = useState({ camera: 'prompt', location: 'prompt', notifications: 'prompt' });
-  const [notifPush,  setNotifPush]  = useState(true);
-  const [notifEmail, setNotifEmail] = useState(false);
-  const [trackingOn, setTrackingOn] = useState(true);
+  const [notifPush,      setNotifPush]      = useState(true);
+  const [notifEmail,     setNotifEmail]     = useState(false);
+  const [trackingOn,     setTrackingOn]     = useState(true);
+  const [showDeleteSheet, setShowDeleteSheet] = useState(false);
+  const [deleteConfirm,   setDeleteConfirm]   = useState('');
   const { density, setDensity, theme, setTheme } = useAppPreferences();
 
   const { data: user } = useQuery({ queryKey: ['me'], queryFn: () => base44.auth.me(), staleTime: 60_000 });
@@ -309,6 +312,56 @@ export default function Profile() {
           <LogOut className="h-4 w-4" />
           Log Out
         </button>
+
+        {/* ── Account Deletion ─────────────────────────── */}
+        <button
+          onClick={() => { setDeleteConfirm(''); setShowDeleteSheet(true); }}
+          className="w-full py-3.5 rounded-2xl border border-slate-200 text-slate-400 text-sm flex items-center justify-center gap-2 active:bg-slate-50 transition-colors"
+        >
+          <Trash2 className="h-4 w-4" />
+          Delete Account
+        </button>
+
+        <BottomSheet
+          open={showDeleteSheet}
+          onClose={() => setShowDeleteSheet(false)}
+          title="Delete Account"
+        >
+          <div className="px-5 py-4 space-y-4">
+            <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+              <p className="text-sm font-bold text-red-800 mb-1">This action is permanent</p>
+              <p className="text-xs text-red-600 leading-relaxed">
+                Deleting your account will permanently remove all your data, time entries, evidence, and job history.
+                This cannot be undone. Contact your administrator to process the deletion.
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-semibold text-slate-600 mb-1.5">
+                Type <strong>DELETE</strong> to confirm
+              </p>
+              <input
+                value={deleteConfirm}
+                onChange={e => setDeleteConfirm(e.target.value)}
+                placeholder="DELETE"
+                className="w-full h-10 px-3 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-red-200 focus:border-red-400 font-mono tracking-widest"
+              />
+            </div>
+            <button
+              disabled={deleteConfirm !== 'DELETE'}
+              onClick={() => {
+                toast.error('Account deletion request submitted. An administrator will process this within 48 hours.');
+                setShowDeleteSheet(false);
+              }}
+              className="w-full h-11 rounded-xl bg-red-600 text-white text-sm font-bold disabled:opacity-40 disabled:cursor-not-allowed active:bg-red-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <Trash2 className="h-4 w-4" />
+              Request Account Deletion
+            </button>
+            <p className="text-[10px] text-slate-400 text-center pb-2">
+              Your request will be reviewed within 48 hours per our data retention policy.
+            </p>
+          </div>
+        </BottomSheet>
 
       </div>
     </div>

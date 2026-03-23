@@ -2,7 +2,7 @@
  * BottomSheet — branded native-feel bottom sheet for mobile selects.
  * Replaces <select> elements across the app.
  */
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Check, X } from 'lucide-react';
 import { cn } from '@/lib/utils';
