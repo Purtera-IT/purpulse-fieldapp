@@ -1,0 +1,976 @@
+diff --git a/src/components/fieldv2/EvidenceGalleryView.jsx b/src/components/fieldv2/EvidenceGalleryView.jsx
+index ecaad78..f04dc8b 100644
+--- a/src/components/fieldv2/EvidenceGalleryView.jsx
++++ b/src/components/fieldv2/EvidenceGalleryView.jsx
+@@ -5,7 +5,7 @@
+ import React, { useState } from 'react';
+ import { useMutation, useQueryClient } from '@tanstack/react-query';
+ import { base44 } from '@/api/base44Client';
+-import { Plus, X, MapPin, Tag, CheckCircle2, XCircle, FileText, Layers } from 'lucide-react';
++import { Plus, X, MapPin, Tag, CheckCircle2, XCircle, FileText, Layers, Circle } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+ import { format, parseISO } from 'date-fns';
+ import EvidenceCaptureModal from './EvidenceCaptureModal';
+@@ -19,6 +19,54 @@ const QC_CFG = {
+ 
+ function fmtTs(ts) { try { return format(parseISO(ts), 'MMM d HH:mm'); } catch { return ts || '—'; } }
+ 
++function EvidenceRequirementsPanel({ job, evidence }) {
++  const reqs = job?.evidence_requirements;
++  if (!Array.isArray(reqs) || reqs.length === 0) {
++    return (
++      <p className="text-xs text-slate-500 mb-4 leading-relaxed">
++        No structured evidence requirements are configured for this work order yet.
++      </p>
++    );
++  }
++  return (
++    <div className="bg-white rounded-xl border border-slate-100 p-4 mb-4">
++      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
++        Required vs uploaded
++      </p>
++      <ul className="space-y-2">
++        {reqs.map((req, i) => {
++          const min = req.min_count || 1;
++          const count = evidence.filter(
++            (e) => e.evidence_type === req.type && e.status === 'uploaded'
++          ).length;
++          const met = count >= min;
++          return (
++            <li
++              key={i}
++              className={cn(
++                'flex items-center justify-between gap-3 text-xs rounded-lg px-3 py-2.5 border',
++                met ? 'bg-emerald-50 border-emerald-100 text-emerald-900' : 'bg-amber-50/80 border-amber-100 text-amber-950'
++              )}
++            >
++              <span className="flex items-center gap-2 font-semibold min-w-0">
++                {met ? (
++                  <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" aria-hidden />
++                ) : (
++                  <Circle className="h-4 w-4 text-amber-500 flex-shrink-0" aria-hidden />
++                )}
++                <span className="truncate capitalize">{req.label || req.type?.replace(/_/g, ' ')}</span>
++              </span>
++              <span className="font-mono tabular-nums text-[11px] font-bold flex-shrink-0">
++                {count}/{min}
++              </span>
++            </li>
++          );
++        })}
++      </ul>
++    </div>
++  );
++}
++
+ function Thumbnail({ ev, onClick }) {
+   const isImg = ev.content_type?.startsWith('image');
+   const qc    = QC_CFG[ev.qc_status] || QC_CFG.unknown;
+@@ -179,6 +227,13 @@ export default function EvidenceGalleryView({ job, evidence, labels, adapters, o
+ 
+   return (
+     <div className="space-y-4">
++      <div>
++        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
++          Evidence for this job
++        </p>
++        <EvidenceRequirementsPanel job={job} evidence={evidence} />
++      </div>
++
+       {/* Add Evidence */}
+       <button onClick={() => setShowCapture(true)}
+         className="w-full h-11 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 text-sm font-semibold flex items-center justify-center gap-2 hover:border-slate-500 hover:text-slate-700 transition-colors">
+diff --git a/src/components/fieldv2/FieldTimeTracker.jsx b/src/components/fieldv2/FieldTimeTracker.jsx
+index 6083edb..b1722f7 100644
+--- a/src/components/fieldv2/FieldTimeTracker.jsx
++++ b/src/components/fieldv2/FieldTimeTracker.jsx
+@@ -1,6 +1,6 @@
+ /**
+- * FieldTimeTracker — TimeLog tab (G)
+- * Clock-in/out, manual entry, and activity log.
++ * FieldTimeTracker — Work session (clock in/out, manual entry, activity log).
++ * Use variant="embedded" inside Job Overview (compact execution context).
+  * Persists to Activity + AuditLog.
+  */
+ import React, { useState } from 'react';
+@@ -37,7 +37,13 @@ function ActivityRow({ a }) {
+   );
+ }
+ 
+-export default function FieldTimeTracker({ job, activities, adapters, onRefresh }) {
++export default function FieldTimeTracker({
++  job,
++  activities,
++  adapters,
++  onRefresh,
++  variant = 'default',
++}) {
+   const adapter = adapters?.activity || defaultAdapters.activity;
+   const { user } = useAuth();
+   const [clocked,   setClockedIn]  = useState(() => activities.some(a => a.event_type === 'clock_in'));
+@@ -102,9 +108,10 @@ export default function FieldTimeTracker({ job, activities, adapters, onRefresh
+   };
+ 
+   const sorted = [...activities].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
++  const embedded = variant === 'embedded';
+ 
+   return (
+-    <div className="space-y-4">
++    <div className={embedded ? 'space-y-3' : 'space-y-4'}>
+       <PreArrivalAckSheet
+         open={arrivalAckOpen}
+         onOpenChange={setArrivalAckOpen}
+@@ -115,21 +122,29 @@ export default function FieldTimeTracker({ job, activities, adapters, onRefresh
+       />
+ 
+       {/* Clock in/out */}
+-      <div className="bg-white rounded-xl border border-slate-100 p-4">
+-        <div className="flex items-center justify-between mb-3">
+-          <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Session Control</p>
++      <div className={cn('bg-white rounded-xl border border-slate-100', embedded ? 'p-3' : 'p-4')}>
++        <div className={cn('flex items-center justify-between', embedded ? 'mb-2' : 'mb-3')}>
++          <p className={cn('font-black text-slate-500 uppercase tracking-widest', embedded ? 'text-[9px]' : 'text-xs')}>
++            {embedded ? 'On-site session' : 'Session Control'}
++          </p>
+           <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', clocked ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500')}>
+-            {clocked ? '● Clocked In' : '○ Off Clock'}
++            {clocked ? '● In' : '○ Out'}
+           </span>
+         </div>
+         <div className="flex gap-2">
+           <button onClick={() => setArrivalAckOpen(true)} disabled={clocked || log.isPending}
+-            className="flex-1 h-11 rounded-[8px] bg-emerald-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-emerald-700 transition-colors">
+-            <Play className="h-4 w-4" /> Clock In
++            className={cn(
++              'flex-1 rounded-[8px] bg-emerald-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-emerald-700 transition-colors',
++              embedded ? 'h-9 text-xs' : 'h-11 text-sm'
++            )}>
++            <Play className={embedded ? 'h-3.5 w-3.5' : 'h-4 w-4'} /> Clock In
+           </button>
+           <button onClick={handleClockOut} disabled={!clocked || log.isPending}
+-            className="flex-1 h-11 rounded-[8px] bg-red-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-red-700 transition-colors">
+-            <Square className="h-4 w-4" /> Clock Out
++            className={cn(
++              'flex-1 rounded-[8px] bg-red-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-red-700 transition-colors',
++              embedded ? 'h-9 text-xs' : 'h-11 text-sm'
++            )}>
++            <Square className={embedded ? 'h-3.5 w-3.5' : 'h-4 w-4'} /> Clock Out
+           </button>
+         </div>
+       </div>
+@@ -137,9 +152,12 @@ export default function FieldTimeTracker({ job, activities, adapters, onRefresh
+       {/* Manual entry */}
+       <div className="bg-white rounded-xl border border-slate-100">
+         <button onClick={() => setShowManual(s => !s)}
+-          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-slate-50 transition-colors rounded-xl">
+-          <Edit3 className="h-4 w-4 text-slate-400" />
+-          <p className="text-sm font-bold text-slate-700 flex-1">Manual Entry</p>
++          className={cn(
++            'w-full flex items-center gap-3 text-left hover:bg-slate-50 transition-colors rounded-xl',
++            embedded ? 'px-3 py-2.5' : 'px-4 py-3.5'
++          )}>
++          <Edit3 className={cn('text-slate-400', embedded ? 'h-3.5 w-3.5' : 'h-4 w-4')} />
++          <p className={cn('font-bold text-slate-700 flex-1', embedded ? 'text-xs' : 'text-sm')}>Manual entry</p>
+           <Plus className={cn('h-4 w-4 text-slate-400 transition-transform', showManual && 'rotate-45')} />
+         </button>
+         {showManual && (
+@@ -174,13 +192,19 @@ export default function FieldTimeTracker({ job, activities, adapters, onRefresh
+ 
+       {/* Activity log */}
+       <div className="bg-white rounded-xl border border-slate-100">
+-        <div className="px-4 py-2.5 border-b border-slate-50 flex items-center gap-2">
++        <div className={cn('border-b border-slate-50 flex items-center gap-2', embedded ? 'px-3 py-2' : 'px-4 py-2.5')}>
+           <Clock className="h-3.5 w-3.5 text-slate-400" />
+-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Activity Log ({sorted.length})</p>
++          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
++            Recent activity ({sorted.length})
++          </p>
+         </div>
+-        <div className="px-4 py-2 max-h-72 overflow-y-auto">
++        <div className={cn('py-2 overflow-y-auto', embedded ? 'px-3 max-h-36' : 'px-4 max-h-72')}>
+           {sorted.length === 0 ? (
+-            <p className="text-center text-slate-400 text-xs py-6">No activities yet.</p>
++            <p className="text-center text-slate-400 text-xs py-4">
++              {embedded
++                ? 'Recent activity will appear here once this job sync is available.'
++                : 'No activities yet.'}
++            </p>
+           ) : sorted.map(a => <ActivityRow key={a.id} a={a} />)}
+         </div>
+       </div>
+diff --git a/src/components/fieldv2/JobOverview.jsx b/src/components/fieldv2/JobOverview.jsx
+index b78bdc4..074a569 100644
+--- a/src/components/fieldv2/JobOverview.jsx
++++ b/src/components/fieldv2/JobOverview.jsx
+@@ -1,7 +1,6 @@
+ /**
+- * JobOverview — Overview tab (B)
+- * Shows job metadata, status, SOW, assigned techs.
+- * Action buttons: Start Job, Complete Job, Snapshot SOW.
++ * JobOverview — Understand the job, status, site/contact, and work session (this job).
++ * Closeout controls live in JobCloseoutSection.
+  */
+ import React, { useState } from 'react';
+ import { useMutation, useQueryClient } from '@tanstack/react-query';
+@@ -9,14 +8,14 @@ import { base44 } from '@/api/base44Client';
+ import { useAuth } from '@/lib/AuthContext';
+ import {
+   MapPin, Phone, Mail, User, Clock, Building2,
+-  Play, CheckCircle, AlertTriangle, FileText,
++  Play, AlertTriangle, FileText,
+   Lock,
+ } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+ import { format, parseISO } from 'date-fns';
+ import { toast } from 'sonner';
+-import JobStateTransitioner from './JobStateTransitioner';
+ import PreJobToolCheckModal from './PreJobToolCheckModal';
++import FieldTimeTracker from './FieldTimeTracker';
+ import { emitDispatchEventForJobStatusChange } from '@/lib/dispatchEvent';
+ 
+ const STATUS_CFG = {
+@@ -58,20 +57,16 @@ function Card({ title, children }) {
+ 
+ function fmtTs(ts) { try { return format(parseISO(ts), 'MMM d, yyyy HH:mm'); } catch { return ts || '—'; } }
+ 
+-export default function JobOverview({ job, evidence, labels, onRefresh }) {
+-  const [snapshotting, setSnapshotting] = useState(false);
++export default function JobOverview({
++  job,
++  activities,
++  onRefresh,
++  onNavigateToSection,
++}) {
+   const [toolCheckOpen, setToolCheckOpen] = useState(false);
+   const { permissions, user } = useAuth();
+   const qc = useQueryClient();
+ 
+-  // Determine if runbook is complete
+-  const runbookComplete = job?.runbook_phases?.every(phase =>
+-    phase.steps?.every(step => step.completed)
+-  ) ?? false;
+-
+-  // Check if signature is present
+-  const hasSignature = !!job?.signoff_signature_url;
+-
+   const updateMutation = useMutation({
+     mutationFn: async ({ status }) => {
+       await emitDispatchEventForJobStatusChange({
+@@ -80,8 +75,8 @@ export default function JobOverview({ job, evidence, labels, onRefresh }) {
+         user,
+       });
+       const now = new Date().toISOString();
+-      const extra = status === 'in_progress' ? { work_start_time: now, check_in_time: now } :
+-                    status === 'pending_closeout' ? { work_end_time: now } : {};
++      const extra =
++        status === 'in_progress' ? { work_start_time: now, check_in_time: now } : {};
+       return base44.entities.Job.update(job.id, { status, ...extra });
+     },
+     onSuccess: (_, { status }) => {
+@@ -102,19 +97,11 @@ export default function JobOverview({ job, evidence, labels, onRefresh }) {
+     handleStatusChange('in_progress');
+   };
+ 
+-  const handleSnapshotSOW = async () => {
+-    setSnapshotting(true);
+-    await new Promise(r => setTimeout(r, 600));
+-    setSnapshotting(false);
+-    toast.success('SOW snapshot created (mock) — version pinned to current runbook.');
+-  };
+-
+   const stat = STATUS_CFG[job.status] || STATUS_CFG.assigned;
+-  const canStart    = ['assigned', 'en_route', 'checked_in', 'paused'].includes(job.status);
+-  const canComplete = ['in_progress', 'checked_in'].includes(job.status);
++  const canStart = ['assigned', 'en_route', 'checked_in', 'paused'].includes(job.status);
+ 
+   return (
+-    <div className="space-y-3">
++    <div className="space-y-4">
+       <PreJobToolCheckModal
+         open={toolCheckOpen}
+         onOpenChange={setToolCheckOpen}
+@@ -123,7 +110,6 @@ export default function JobOverview({ job, evidence, labels, onRefresh }) {
+         onPassed={handleStartJobAfterToolCheck}
+       />
+ 
+-      {/* Status + actions */}
+       <Card>
+         <div className="flex items-center justify-between">
+           <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold', stat.bg, stat.text)}>
+@@ -135,6 +121,7 @@ export default function JobOverview({ job, evidence, labels, onRefresh }) {
+         <div className="flex flex-wrap gap-2 pt-1">
+           {canStart && permissions?.canCompleteJob && (
+             <button
++              type="button"
+               onClick={() => {
+                 if (job.status === 'paused') handleStatusChange('in_progress');
+                 else setToolCheckOpen(true);
+@@ -146,43 +133,39 @@ export default function JobOverview({ job, evidence, labels, onRefresh }) {
+             </button>
+           )}
+           {canStart && !permissions?.canCompleteJob && (
+-            <button disabled title="Permission required"
++            <button type="button" disabled title="Permission required"
+               className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed">
+               <Lock className="h-3.5 w-3.5" /> Start Job
+             </button>
+           )}
+-          {canComplete && permissions?.canCompleteJob && (
+-            <button onClick={() => handleStatusChange('pending_closeout')} disabled={updateMutation.isPending}
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+-              <CheckCircle className="h-3.5 w-3.5" /> Complete Job
++        </div>
++        {(job.status === 'in_progress' || job.status === 'checked_in') && onNavigateToSection && (
++          <div className="pt-3 border-t border-slate-50 flex flex-wrap gap-x-4 gap-y-2">
++            <button
++              type="button"
++              onClick={() => onNavigateToSection('runbook')}
++              className="text-xs font-bold text-slate-900 underline underline-offset-2"
++            >
++              Open Runbook
+             </button>
+-          )}
+-          {canComplete && !permissions?.canCompleteJob && (
+-            <button disabled title="Permission required"
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed">
+-              <Lock className="h-3.5 w-3.5" /> Complete Job
++            <button
++              type="button"
++              onClick={() => onNavigateToSection('evidence')}
++              className="text-xs font-bold text-slate-900 underline underline-offset-2"
++            >
++              Open Evidence
+             </button>
+-          )}
+-          {permissions?.canEditJob && (
+-            <button onClick={handleSnapshotSOW} disabled={snapshotting}
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-slate-900 text-white text-xs font-bold hover:bg-slate-700 disabled:opacity-50 transition-colors">
+-              <FileText className="h-3.5 w-3.5" />
+-              {snapshotting ? 'Snapshotting…' : 'Snapshot SOW'}
++            <button
++              type="button"
++              onClick={() => onNavigateToSection('closeout')}
++              className="text-xs font-bold text-slate-900 underline underline-offset-2"
++            >
++              Closeout
+             </button>
+-          )}
+-        </div>
++          </div>
++        )}
+       </Card>
+ 
+-      {/* State Machine */}
+-      <JobStateTransitioner
+-        job={job}
+-        evidence={evidence}
+-        runbookComplete={runbookComplete}
+-        hasSignature={hasSignature}
+-        onTransitionSuccess={onRefresh}
+-      />
+-
+-      {/* Hazards */}
+       {job.hazards && (
+         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+           <div className="flex items-center gap-2 mb-1.5">
+@@ -193,7 +176,6 @@ export default function JobOverview({ job, evidence, labels, onRefresh }) {
+         </div>
+       )}
+ 
+-      {/* Work order details */}
+       <Card title="Work Order">
+         {job.external_id   && <InfoRow icon={FileText}   label="WO Number">{job.external_id}</InfoRow>}
+         {job.project_name  && <InfoRow icon={Building2}  label="Project">{job.project_name}</InfoRow>}
+@@ -205,7 +187,6 @@ export default function JobOverview({ job, evidence, labels, onRefresh }) {
+         {job.work_end_time   && <InfoRow icon={Clock} label="Actual End">{fmtTs(job.work_end_time)}</InfoRow>}
+       </Card>
+ 
+-      {/* Site */}
+       {(job.site_name || job.site_address) && (
+         <Card title="Site">
+           {job.site_name    && <InfoRow icon={Building2} label="Site">{job.site_name}</InfoRow>}
+@@ -218,7 +199,6 @@ export default function JobOverview({ job, evidence, labels, onRefresh }) {
+         </Card>
+       )}
+ 
+-      {/* Contact */}
+       {(job.contact_name || job.contact_phone) && (
+         <Card title="Contact">
+           {job.contact_name  && <InfoRow icon={User}  label="Name">{job.contact_name}</InfoRow>}
+@@ -229,21 +209,20 @@ export default function JobOverview({ job, evidence, labels, onRefresh }) {
+         </Card>
+       )}
+ 
+-      {/* Evidence summary */}
+-      <Card title="Evidence Summary">
+-        <div className="grid grid-cols-3 gap-2 text-center">
+-          {[
+-            ['Total', evidence.length],
+-            ['Uploaded', evidence.filter(e => e.status === 'uploaded').length],
+-            ['Approved', evidence.filter(e => e.approved_for_training).length],
+-          ].map(([l, v]) => (
+-            <div key={l} className="bg-slate-50 rounded-lg p-2">
+-              <p className="text-xl font-black text-slate-900">{v}</p>
+-              <p className="text-[9px] text-slate-500 font-semibold uppercase tracking-widest">{l}</p>
+-            </div>
+-          ))}
+-        </div>
+-      </Card>
++      <div>
++        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-0.5">
++          Work session
++        </p>
++        <p className="text-[11px] text-slate-500 mb-2 px-0.5">
++          Clock in and out for this job. This is part of field execution, not a separate time product.
++        </p>
++        <FieldTimeTracker
++          job={job}
++          activities={activities}
++          onRefresh={onRefresh}
++          variant="embedded"
++        />
++      </div>
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/pages/FieldJobDetail.jsx b/src/pages/FieldJobDetail.jsx
+index a088067..ac55f14 100644
+--- a/src/pages/FieldJobDetail.jsx
++++ b/src/pages/FieldJobDetail.jsx
+@@ -1,10 +1,9 @@
+ /**
+- * FieldJobDetail — Job execution cockpit (B)
+- * Tabs: Overview | Runbook | Evidence | TimeLog | Meetings | Audit
+- * Full-screen (no bottom nav shell).
++ * FieldJobDetail — Single workflow surface: Overview | Runbook | Evidence | Closeout | Comms.
++ * Legacy ?tab= values: timelog→overview, meetings→comms, audit→closeout.
+  */
+ import React, { useState } from 'react';
+-import { Link } from 'react-router-dom';
++import { Link, useSearchParams } from 'react-router-dom';
+ import { useQuery, useQueryClient } from '@tanstack/react-query';
+ import { ArrowLeft, Loader2 } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+@@ -16,40 +15,61 @@ import {
+   emitJobContextFieldIfChanged,
+ } from '@/lib/jobContextField';
+ import { getTechnicianIdForCanonicalEvents } from '@/lib/technicianId';
++import { getNextStepMessage } from '@/components/fieldv2/jobExecutionNextStep';
+ 
+-import JobOverview      from '@/components/fieldv2/JobOverview';
+-import RunbookSteps     from '@/components/fieldv2/RunbookSteps';
++import JobOverview from '@/components/fieldv2/JobOverview';
++import RunbookSteps from '@/components/fieldv2/RunbookSteps';
+ import EvidenceGalleryView from '@/components/fieldv2/EvidenceGalleryView';
+-import FieldTimeTracker from '@/components/fieldv2/FieldTimeTracker';
+-import MeetingsTab      from '@/components/fieldv2/MeetingsTab';
+-import AuditTab         from '@/components/fieldv2/AuditTab';
++import JobCloseoutSection from '@/components/fieldv2/JobCloseoutSection';
++import JobCommsSection from '@/components/fieldv2/JobCommsSection';
+ import OfflineEditsIndicator from '@/components/fieldv2/OfflineEditsIndicator.jsx';
+ import UploadProgressIndicator from '@/components/fieldv2/UploadProgressIndicator';
+ 
+-const TABS = [
+-  { id: 'overview',  label: 'Overview'  },
+-  { id: 'runbook',   label: 'Runbook'   },
+-  { id: 'evidence',  label: 'Evidence'  },
+-  { id: 'timelog',   label: 'TimeLog'   },
+-  { id: 'meetings',  label: 'Meetings'  },
+-  { id: 'audit',     label: 'Audit'     },
++const LEGACY_TAB_ALIASES = {
++  timelog: 'overview',
++  meetings: 'comms',
++  audit: 'closeout',
++};
++
++const SECTIONS = [
++  { id: 'overview', label: 'Overview' },
++  { id: 'runbook', label: 'Runbook' },
++  { id: 'evidence', label: 'Evidence' },
++  { id: 'closeout', label: 'Closeout' },
++  { id: 'comms', label: 'Comms' },
+ ];
+ 
++const VALID_SECTIONS = new Set(SECTIONS.map((s) => s.id));
++
++function normalizeSection(tab) {
++  if (!tab || typeof tab !== 'string') return 'overview';
++  const t = tab.toLowerCase();
++  const mapped = LEGACY_TAB_ALIASES[t] ?? t;
++  return VALID_SECTIONS.has(mapped) ? mapped : 'overview';
++}
++
+ const STATUS_DOT = {
+-  in_progress: 'bg-blue-500',  paused: 'bg-amber-400',
+-  checked_in:  'bg-purple-500', en_route: 'bg-cyan-500',
++  in_progress: 'bg-blue-500',
++  paused: 'bg-amber-400',
++  checked_in: 'bg-purple-500',
++  en_route: 'bg-cyan-500',
+ };
+ 
+ export default function FieldJobDetail() {
+-  const urlParams = new URLSearchParams(window.location.search);
+-  const jobId     = urlParams.get('id');
+-  const initTab   = urlParams.get('tab') || 'overview';
+-  const [tab, setTab] = useState(initTab);
++  const [searchParams, setSearchParams] = useSearchParams();
++  const jobId = searchParams.get('id');
++  const section = normalizeSection(searchParams.get('tab'));
+   const [isOnline, setIsOnline] = useState(navigator.onLine);
+   const qc = useQueryClient();
+   const { user } = useAuth();
+ 
+-  // Track online/offline status
++  const setSection = (id) => {
++    const next = new URLSearchParams(searchParams);
++    next.set('tab', id);
++    if (jobId) next.set('id', jobId);
++    setSearchParams(next, { replace: true });
++  };
++
+   React.useEffect(() => {
+     const handleOnline = () => setIsOnline(true);
+     const handleOffline = () => setIsOnline(false);
+@@ -61,11 +81,10 @@ export default function FieldJobDetail() {
+     };
+   }, []);
+ 
+-  /* ── Data queries ────────────────────────────────────────────────── */
+-  const { data: job, isLoading } = useQuery({
++  const { data: job, isLoading, isError, error } = useQuery({
+     queryKey: ['fj-job', jobId],
+-    queryFn:  () => jobId ? jobRepository.getJob(jobId) : Promise.resolve(null),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? jobRepository.getJob(jobId) : Promise.resolve(null)),
++    enabled: !!jobId,
+     staleTime: 30_000,
+   });
+ 
+@@ -92,103 +111,180 @@ export default function FieldJobDetail() {
+ 
+   const { data: evidence = [] } = useQuery({
+     queryKey: ['fj-evidence', jobId],
+-    queryFn:  () => jobId ? apiClient.getEvidence(jobId) : Promise.resolve([]),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? apiClient.getEvidence(jobId) : Promise.resolve([])),
++    enabled: !!jobId,
+   });
+ 
+   const { data: labels = [] } = useQuery({
+     queryKey: ['fj-labels', jobId],
+-    queryFn:  () => jobId ? apiClient.getLabels(jobId) : Promise.resolve([]),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? apiClient.getLabels(jobId) : Promise.resolve([])),
++    enabled: !!jobId,
+   });
+ 
+   const { data: meetings = [] } = useQuery({
+     queryKey: ['fj-meetings', jobId],
+-    queryFn:  () => jobId ? apiClient.getMeetings(jobId) : Promise.resolve([]),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? apiClient.getMeetings(jobId) : Promise.resolve([])),
++    enabled: !!jobId,
+   });
+ 
+   const { data: activities = [] } = useQuery({
+     queryKey: ['fj-activities', jobId],
+-    queryFn:  () => [],
+-    enabled:  false,
++    queryFn: () => [],
++    enabled: false,
+   });
+ 
+   const { data: auditLogs = [] } = useQuery({
+     queryKey: ['fj-audit', jobId],
+-    queryFn:  () => [],
+-    enabled:  false,
++    queryFn: () => [],
++    enabled: false,
+   });
+ 
+   const invalidateAll = () => {
+-    ['fj-job','fj-evidence','fj-labels','fj-meetings','fj-activities','fj-audit']
+-      .forEach(k => qc.invalidateQueries({ queryKey: [k, jobId] }));
++    ['fj-job', 'fj-evidence', 'fj-labels', 'fj-meetings', 'fj-activities', 'fj-audit'].forEach(
++      (k) => qc.invalidateQueries({ queryKey: [k, jobId] })
++    );
+   };
+ 
+-  /* ── Guards ──────────────────────────────────────────────────────── */
+-  if (!jobId) return <div className="p-10 text-center text-slate-400 text-sm">No job ID in URL</div>;
+-  if (isLoading) return (
+-    <div className="min-h-screen flex items-center justify-center">
+-      <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+-    </div>
+-  );
+-  if (!job) return <div className="p-10 text-center text-slate-400 text-sm">Job not found</div>;
++  if (!jobId) {
++    return <div className="p-10 text-center text-slate-400 text-sm">No job ID in URL</div>;
++  }
++  if (isLoading) {
++    return (
++      <div className="min-h-screen flex items-center justify-center">
++        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
++      </div>
++    );
++  }
++  if (isError) {
++    return (
++      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
++        <p className="text-sm font-semibold text-slate-800">Couldn&apos;t load this job</p>
++        <p className="text-xs text-slate-500 mt-2 max-w-sm">
++          {error instanceof Error ? error.message : 'Check your connection and try again.'}
++        </p>
++        <Link
++          to="/FieldJobs"
++          className="mt-6 text-sm font-bold text-slate-900 underline underline-offset-2"
++        >
++          Back to jobs
++        </Link>
++      </div>
++    );
++  }
++  if (!job) {
++    return (
++      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
++        <p className="text-sm font-semibold text-slate-800">Job not found</p>
++        <p className="text-xs text-slate-500 mt-2">It may have been removed or you may not have access.</p>
++        <Link
++          to="/FieldJobs"
++          className="mt-6 text-sm font-bold text-slate-900 underline underline-offset-2"
++        >
++          Back to jobs
++        </Link>
++      </div>
++    );
++  }
+ 
+-  const tabProps = { job, evidence, labels, meetings, activities, auditLogs, onRefresh: invalidateAll };
+-  const activeDot = STATUS_DOT[job.status];
++  const tabProps = {
++    job,
++    evidence,
++    labels,
++    meetings,
++    activities,
++    auditLogs,
++    onRefresh: invalidateAll,
++  };
+ 
+-  // Pass full job data to tabs (not just evidence)
+-  const tabPropsWithJob = { ...tabProps };
++  const activeDot = STATUS_DOT[job.status];
++  const nextStep = getNextStepMessage(job, evidence);
++  const runbookComplete =
++    job.runbook_phases?.every((phase) => phase.steps?.every((step) => step.completed)) ?? false;
++  const hasSignature = !!job.signoff_signature_url;
+ 
+   return (
+     <div className="min-h-screen bg-slate-50 flex flex-col">
+-
+-      {/* ── Sticky header ──────────────────────────────────────────── */}
+       <div className="sticky top-0 z-30 bg-white border-b border-slate-100 shadow-sm">
+-        <div className="max-w-2xl mx-auto px-4 pt-3 pb-0">
+-
++        <div className="max-w-2xl mx-auto px-4 pt-3 pb-3">
+           <div className="flex items-center gap-3 mb-2">
+-            <Link to="/FieldJobs"
+-              className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center flex-shrink-0 transition-colors">
++            <Link
++              to="/FieldJobs"
++              className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center flex-shrink-0 transition-colors"
++            >
+               <ArrowLeft className="h-4 w-4 text-slate-600" />
+             </Link>
+             <div className="flex-1 min-w-0">
+               <div className="flex items-center gap-2">
+-                {activeDot && <span className={cn('h-2 w-2 rounded-full flex-shrink-0 motion-safe:animate-pulse', activeDot)} />}
++                {activeDot && (
++                  <span
++                    className={cn(
++                      'h-2 w-2 rounded-full flex-shrink-0 motion-safe:animate-pulse',
++                      activeDot
++                    )}
++                  />
++                )}
+                 <h1 className="text-sm font-black text-slate-900 truncate">{job.title}</h1>
+               </div>
+-              <p className="text-[10px] text-slate-400 truncate">{job.external_id} · {job.project_name}</p>
++              <p className="text-[10px] text-slate-400 truncate">
++                {job.external_id} · {job.project_name}
++              </p>
++              {nextStep && (
++                <p className="text-[11px] text-slate-600 mt-1.5 leading-snug line-clamp-2">
++                  {nextStep}
++                </p>
++              )}
+             </div>
+           </div>
+ 
+-          {/* Tab strip */}
+-          <div className="flex overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+-            {TABS.map(t => (
+-              <button key={t.id} onClick={() => setTab(t.id)}
++          <div
++            className="flex rounded-xl bg-slate-100 p-1 gap-0.5 overflow-x-auto"
++            style={{ scrollbarWidth: 'none' }}
++            role="tablist"
++            aria-label="Job sections"
++          >
++            {SECTIONS.map((s) => (
++              <button
++                key={s.id}
++                type="button"
++                role="tab"
++                aria-selected={section === s.id}
++                onClick={() => setSection(s.id)}
+                 className={cn(
+-                  'flex-shrink-0 py-2.5 px-3.5 text-[11px] font-bold border-b-2 transition-all',
+-                  tab === t.id ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'
+-                )}>
+-                {t.label}
++                  'flex-1 min-w-[4.25rem] py-2 px-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap',
++                  section === s.id
++                    ? 'bg-white text-slate-900 shadow-sm'
++                    : 'text-slate-500 hover:text-slate-700'
++                )}
++              >
++                {s.label}
+               </button>
+             ))}
+           </div>
+         </div>
+       </div>
+ 
+-      {/* ── Tab content ────────────────────────────────────────────── */}
+       <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-4 pb-10 space-y-4">
+         <OfflineEditsIndicator jobId={jobId} isOnline={isOnline} />
+         <UploadProgressIndicator jobId={jobId} isOnline={isOnline} />
+         <div>
+-          {tab === 'overview'  && <JobOverview       {...tabPropsWithJob} />}
+-          {tab === 'runbook'   && <RunbookSteps       {...tabPropsWithJob} />}
+-          {tab === 'evidence'  && <EvidenceGalleryView {...tabPropsWithJob} />}
+-          {tab === 'timelog'   && <FieldTimeTracker    {...tabPropsWithJob} />}
+-          {tab === 'meetings'  && <MeetingsTab         {...tabPropsWithJob} />}
+-          {tab === 'audit'     && <AuditTab            {...tabPropsWithJob} />}
++          {section === 'overview' && (
++            <JobOverview {...tabProps} onNavigateToSection={setSection} />
++          )}
++          {section === 'runbook' && <RunbookSteps {...tabProps} />}
++          {section === 'evidence' && <EvidenceGalleryView {...tabProps} />}
++          {section === 'closeout' && (
++            <JobCloseoutSection
++              job={job}
++              evidence={evidence}
++              runbookComplete={runbookComplete}
++              hasSignature={hasSignature}
++              auditLogs={auditLogs}
++              onRefresh={invalidateAll}
++            />
++          )}
++          {section === 'comms' && <JobCommsSection {...tabProps} />}
+         </div>
+       </div>
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/components/fieldv2/JobCloseoutSection.jsx b/src/components/fieldv2/JobCloseoutSection.jsx
+new file mode 100644
+index 0000000..925d9ca
+--- /dev/null
++++ b/src/components/fieldv2/JobCloseoutSection.jsx
+@@ -0,0 +1,71 @@
++/**
++ * Closeout — completion readiness, transitions, sign-off, then audit/history (secondary).
++ */
++import React from 'react';
++import { useQueryClient } from '@tanstack/react-query';
++import JobStateTransitioner from './JobStateTransitioner';
++import AuditTab from './AuditTab';
++import SignoffCapture from '@/components/field/SignoffCapture';
++
++export default function JobCloseoutSection({
++  job,
++  evidence,
++  runbookComplete,
++  hasSignature,
++  auditLogs,
++  onRefresh,
++}) {
++  const qc = useQueryClient();
++
++  const showSignoff = job.status === 'pending_closeout' && !job.signoff_signature_url;
++
++  return (
++    <div className="space-y-6">
++      <div>
++        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
++          Closeout
++        </p>
++        <p className="text-xs text-slate-600 leading-snug">
++          Finish work on site, use the state actions below when gates are satisfied, then sign off.
++          Activity history is at the bottom for reference.
++        </p>
++      </div>
++
++      <JobStateTransitioner
++        job={job}
++        evidence={evidence}
++        runbookComplete={runbookComplete}
++        hasSignature={hasSignature}
++        onTransitionSuccess={onRefresh}
++      />
++
++      {showSignoff && (
++        <div className="bg-white rounded-xl border border-slate-100 p-4">
++          <SignoffCapture
++            job={job}
++            onComplete={() => {
++              qc.invalidateQueries({ queryKey: ['fj-job', job.id] });
++              onRefresh?.();
++            }}
++          />
++        </div>
++      )}
++
++      {job.status === 'pending_closeout' && job.signoff_signature_url && (
++        <p className="text-xs text-emerald-700 font-semibold bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
++          Sign-off is on file for this job.
++        </p>
++      )}
++
++      <div className="pt-2 border-t border-slate-200 opacity-95">
++        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
++          Activity on this job
++        </p>
++        <p className="text-[11px] text-slate-500 mb-3">
++          Audit events and system actions (when synced from the server).
++        </p>
++        <AuditTab auditLogs={auditLogs} />
++      </div>
++    </div>
++  );
++}
+diff --git a/src/components/fieldv2/JobCommsSection.jsx b/src/components/fieldv2/JobCommsSection.jsx
+new file mode 100644
+index 0000000..233ac3e
+--- /dev/null
++++ b/src/components/fieldv2/JobCommsSection.jsx
+@@ -0,0 +1,53 @@
++/**
++ * Job-contextual coordination: thread + meetings (secondary).
++ * Visually de-emphasized vs Runbook / Evidence / Closeout — support context, not core execution.
++ */
++import React from 'react';
++import { MessageSquare } from 'lucide-react';
++import { cn } from '@/lib/utils';
++import ChatView from '@/components/field/ChatView';
++import MeetingsTab from './MeetingsTab';
++
++export default function JobCommsSection(props) {
++  const { job } = props;
++
++  return (
++    <div
++      className={cn(
++        'rounded-xl border border-dashed border-slate-200 bg-slate-50/80',
++        'px-3 py-4 sm:px-4 space-y-6'
++      )}
++    >
++      <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest px-0.5">
++        Coordination
++      </p>
++
++      <div className="space-y-2">
++        <div className="flex items-center gap-2 px-0.5">
++          <MessageSquare className="h-3.5 w-3.5 text-slate-400" aria-hidden />
++          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">
++            Job messages
++          </p>
++        </div>
++        <p className="text-[11px] text-slate-500 leading-snug px-0.5">
++          PM updates, site coordination, escalation — tied to this work order.
++        </p>
++        <div className="rounded-lg border border-slate-200/90 bg-white/90 overflow-hidden h-[min(40vh,240px)] min-h-[168px] flex flex-col shadow-none">
++          <ChatView jobId={job.id} />
++        </div>
++      </div>
++
++      <div className="pt-1 border-t border-slate-200/80 space-y-2">
++        <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest px-0.5">
++          Meetings
++        </p>
++        <p className="text-[11px] text-slate-500 mb-2 px-0.5">
++          Kickoffs, briefs, and linked notes for this job.
++        </p>
++        <div className="rounded-lg border border-slate-200/80 bg-white/70 px-1 py-1">
++          <MeetingsTab {...props} />
++        </div>
++      </div>
++    </div>
++  );
++}
+diff --git a/src/components/fieldv2/jobExecutionNextStep.js b/src/components/fieldv2/jobExecutionNextStep.js
+new file mode 100644
+index 0000000..ed97050
+--- /dev/null
++++ b/src/components/fieldv2/jobExecutionNextStep.js
+@@ -0,0 +1,53 @@
++/**
++ * Next-step copy for FieldJobDetail header — only from real job + evidence fields.
++ */
++
++export function getNextStepMessage(job, evidence = []) {
++  if (!job?.status) return null;
++
++  const s = job.status;
++  const runbookDone =
++    job.runbook_phases?.every((phase) => phase.steps?.every((step) => step.completed)) ?? false;
++
++  if (s === 'assigned') {
++    return 'Review job details, site notes, and contacts before heading out.';
++  }
++  if (s === 'en_route') {
++    return 'Travel to site and check in when you arrive.';
++  }
++  if (s === 'checked_in' || s === 'paused') {
++    return 'Open Runbook and execute steps in order.';
++  }
++  if (s === 'in_progress') {
++    if (!runbookDone) {
++      return 'Work through the runbook; attach evidence to steps as you go.';
++    }
++    const reqs = job.evidence_requirements;
++    if (Array.isArray(reqs) && reqs.length > 0) {
++      const allMet = reqs.every((r) => {
++        const min = r.min_count || 1;
++        const count = evidence.filter(
++          (e) => e.evidence_type === r.type && e.status === 'uploaded'
++        ).length;
++        return count >= min;
++      });
++      if (!allMet) {
++        return 'Complete required evidence types in Evidence before closeout.';
++      }
++    }
++    return 'Work complete on site — use Closeout when ready to finish and sign off.';
++  }
++  if (s === 'pending_closeout') {
++    if (!job.signoff_signature_url) {
++      return 'Finish sign-off and validation in Closeout.';
++    }
++    return 'Sign-off captured — follow any remaining closeout steps.';
++  }
++  if (s === 'submitted' || s === 'approved') {
++    return 'This job is submitted — view-only.';
++  }
++  if (s === 'rejected' || s === 'qc_required') {
++    return 'Follow office instructions for corrections.';
++  }
++  return null;
++}

@@ -1,0 +1,2411 @@
+diff --git a/src/components/fieldv2/EvidenceGalleryView.jsx b/src/components/fieldv2/EvidenceGalleryView.jsx
+index ecaad78..20ec120 100644
+--- a/src/components/fieldv2/EvidenceGalleryView.jsx
++++ b/src/components/fieldv2/EvidenceGalleryView.jsx
+@@ -1,42 +1,153 @@
+ /**
+  * EvidenceGalleryView — Evidence tab (E)
+- * Grid of thumbnails with metadata overlay, detail modal, QC actions, labeler.
++ * Completeness-first: requirements vs uploaded, honest per-item status, capture with mapping.
+  */
+ import React, { useState } from 'react';
+ import { useMutation, useQueryClient } from '@tanstack/react-query';
+ import { base44 } from '@/api/base44Client';
+-import { Plus, X, MapPin, Tag, CheckCircle2, XCircle, FileText, Layers } from 'lucide-react';
++import { Plus, X, MapPin, Tag, CheckCircle2, XCircle, FileText, Layers, Circle } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+ import { format, parseISO } from 'date-fns';
+ import EvidenceCaptureModal from './EvidenceCaptureModal';
+ import LabelerModal from './LabelerModal';
++import {
++  assignEvidenceToRequirements,
++  getEvidenceStatusPresentation,
++  groupEvidenceByStepOrJob,
++  partitionEvidenceForRequirements,
++  resolveRunbookStepTitle,
++  getStorageNoteForFileUrl,
++} from '@/lib/fieldEvidenceViewModel';
++import {
++  BTN_PRIMARY,
++  FIELD_BODY,
++  FIELD_CARD,
++  FIELD_CTRL_H,
++  FIELD_OVERLINE,
++} from '@/lib/fieldVisualTokens';
+ 
+ const QC_CFG = {
+-  pass:    { bg: 'bg-emerald-500', label: 'Pass' },
+-  fail:    { bg: 'bg-red-500',     label: 'Fail' },
+-  unknown: { bg: 'bg-slate-400',   label: '—'    },
++  pass: { bg: 'bg-emerald-500', label: 'Pass' },
++  fail: { bg: 'bg-red-500', label: 'Fail' },
++  unknown: { bg: 'bg-slate-400', label: '—' },
+ };
+ 
+-function fmtTs(ts) { try { return format(parseISO(ts), 'MMM d HH:mm'); } catch { return ts || '—'; } }
++function fmtTs(ts) {
++  try {
++    return format(parseISO(ts), 'MMM d HH:mm');
++  } catch {
++    return ts || '—';
++  }
++}
++
++function EvidenceRequirementsPanel({ job, evidence, onAddForRequirement }) {
++  const reqs = job?.evidence_requirements;
++  const rows = partitionEvidenceForRequirements(job, evidence);
++
++  if (!Array.isArray(reqs) || reqs.length === 0) {
++    return (
++      <p className="text-xs text-slate-500 mb-4 leading-relaxed">
++        No structured evidence requirements are configured for this work order yet. Each item you add is still labeled
++        by type and optional runbook step so it stays traceable.
++      </p>
++    );
++  }
+ 
+-function Thumbnail({ ev, onClick }) {
++  return (
++    <div className={cn(FIELD_CARD, 'p-4 mb-4')}>
++      <p className={cn(FIELD_OVERLINE, 'mb-3')}>
++        Required vs uploaded
++      </p>
++      <ul className="space-y-2">
++        {rows.map(({ req, min, uploaded, inFlight, met, unmet }, i) => (
++          <li
++            key={i}
++            className={cn(
++              'flex flex-col gap-2 rounded-lg px-3 py-2.5 border text-xs',
++              met ? 'bg-emerald-50 border-emerald-100 text-emerald-900' : 'bg-amber-50/80 border-amber-100 text-amber-950',
++            )}
++          >
++            <div className="flex items-center justify-between gap-3">
++              <span className="flex items-center gap-2 font-semibold min-w-0">
++                {met ? (
++                  <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" aria-hidden />
++                ) : (
++                  <Circle className="h-4 w-4 text-amber-500 flex-shrink-0" aria-hidden />
++                )}
++                <span className="truncate capitalize">{req.label || req.type?.replace(/_/g, ' ')}</span>
++              </span>
++              <span className="font-mono tabular-nums text-[11px] font-bold flex-shrink-0">
++                {uploaded}/{min}
++              </span>
++            </div>
++            <div className="flex items-center justify-between gap-2 pl-6">
++              <span className="text-[10px] text-slate-600">
++                {inFlight > 0 && (
++                  <span className="font-semibold text-amber-800">{inFlight} not finished (upload/sync) · </span>
++                )}
++                {!met && <span className="text-amber-900 font-medium">{unmet} more needed</span>}
++                {met && inFlight === 0 && <span className="text-emerald-800">Requirement met</span>}
++              </span>
++              <button
++                type="button"
++                onClick={() => onAddForRequirement?.(req.type)}
++                className={cn(BTN_PRIMARY, 'h-7 min-h-0 px-2.5 text-[10px] flex-shrink-0')}
++              >
++                Add
++              </button>
++            </div>
++          </li>
++        ))}
++      </ul>
++    </div>
++  );
++}
++
++function Thumbnail({ ev, job, onClick }) {
+   const isImg = ev.content_type?.startsWith('image');
+-  const qc    = QC_CFG[ev.qc_status] || QC_CFG.unknown;
++  const qc = QC_CFG[ev.qc_status] || QC_CFG.unknown;
++  const st = getEvidenceStatusPresentation(ev);
++  const stepTitle = resolveRunbookStepTitle(job, ev.runbook_step_id);
++
+   return (
+-    <button onClick={() => onClick(ev)}
+-      className="relative rounded-xl overflow-hidden bg-slate-100 border border-slate-200 hover:border-slate-400 transition-all aspect-square flex items-center justify-center">
+-      {isImg
+-        ? <img src={ev.file_url || ev.thumbnail_url} alt="evidence" className="h-full w-full object-cover" />
+-        : <FileText className="h-8 w-8 text-slate-400" />}
+-      {/* QC dot */}
+-      <span className={cn('absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full border-2 border-white', qc.bg)} title={qc.label} />
+-      {/* Step tag */}
++    <button
++      type="button"
++      onClick={() => onClick(ev)}
++      className="relative rounded-xl overflow-hidden bg-slate-100 border border-slate-200 hover:border-slate-400 transition-all aspect-square flex items-center justify-center"
++    >
++      {isImg ? (
++        <img src={ev.file_url || ev.thumbnail_url} alt="evidence" className="h-full w-full object-cover" />
++      ) : (
++        <FileText className="h-8 w-8 text-slate-400" />
++      )}
++      <span
++        className={cn('absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full border-2 border-white', qc.bg)}
++        title={`QC: ${qc.label}`}
++      />
++      {st.tone !== 'ok' && (
++        <span
++          className={cn(
++            'absolute top-1.5 left-1.5 max-w-[85%] truncate rounded px-1 py-0.5 text-[8px] font-bold text-white shadow-sm',
++            st.tone === 'error' ? 'bg-red-600' : st.tone === 'pending' ? 'bg-amber-600' : 'bg-slate-600',
++          )}
++          title={st.label}
++        >
++          {st.shortLabel}
++        </span>
++      )}
+       {ev.runbook_step_id && (
+-        <span className="absolute bottom-1 left-1 bg-black/50 text-white text-[9px] font-bold px-1 rounded">
+-          {ev.runbook_step_id}
++        <span
++          className="absolute bottom-1 left-1 bg-black/55 text-white text-[8px] font-bold px-1 rounded max-w-[90%] truncate"
++          title={ev.runbook_step_id}
++        >
++          {stepTitle || ev.runbook_step_id}
++        </span>
++      )}
++      {ev.geo_lat && (
++        <span className="absolute bottom-1 right-1 text-white">
++          <MapPin className="h-2.5 w-2.5 drop-shadow" />
+         </span>
+       )}
+-      {ev.geo_lat && <span className="absolute bottom-1 right-1 text-white"><MapPin className="h-2.5 w-2.5 drop-shadow" /></span>}
+     </button>
+   );
+ }
+@@ -45,31 +156,43 @@ function ExifRow({ label, value }) {
+   if (!value && value !== 0) return null;
+   return (
+     <tr className="border-b border-slate-50">
+-      <td className="py-1.5 pr-3 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{label}</td>
++      <td className={cn('py-1.5 pr-3 whitespace-nowrap', FIELD_OVERLINE)}>
++        {label}
++      </td>
+       <td className="py-1.5 text-xs text-slate-700 font-mono">{String(value)}</td>
+     </tr>
+   );
+ }
+ 
+-function DetailModal({ ev, onClose, onLabel, onQC }) {
++function DetailModal({ ev, job, onClose, onLabel, onQC }) {
+   const exif = ev.exif_metadata || {};
+   const hasGeo = ev.geo_lat != null;
+   const isImg = ev.content_type?.startsWith('image');
+   const qc = QC_CFG[ev.qc_status] || QC_CFG.unknown;
++  const st = getEvidenceStatusPresentation(ev);
++  const stepTitle = resolveRunbookStepTitle(job, ev.runbook_step_id);
++  const storageNote = getStorageNoteForFileUrl(ev.file_url);
+ 
+   return (
+-    <div className="fixed inset-0 z-50 flex items-end md:items-center md:justify-center" role="dialog" aria-modal="true">
++    <div
++      className="fixed inset-0 z-50 flex items-end md:items-center md:justify-center"
++      role="dialog"
++      aria-modal="true"
++    >
+       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+       <div className="relative w-full max-w-lg bg-white rounded-t-3xl md:rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+         <div className="flex items-center justify-between px-5 pt-5 pb-3 sticky top-0 bg-white border-b border-slate-50 z-10">
+-          <h2 className="text-sm font-black text-slate-900 truncate flex-1">Evidence Detail</h2>
+-          <button onClick={onClose} className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 ml-2">
++          <h2 className="text-sm font-bold text-slate-900 truncate flex-1">Evidence Detail</h2>
++          <button
++            type="button"
++            onClick={onClose}
++            className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 ml-2"
++          >
+             <X className="h-4 w-4 text-slate-600" />
+           </button>
+         </div>
+ 
+         <div className="px-5 pb-10 space-y-4 mt-3">
+-          {/* Full-size image */}
+           {isImg && (
+             <div className="rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center max-h-64">
+               <img src={ev.file_url} alt="evidence" className="max-h-64 w-full object-contain" />
+@@ -81,56 +204,99 @@ function DetailModal({ ev, onClose, onLabel, onQC }) {
+             </div>
+           )}
+ 
+-          {/* QC Status + actions */}
+-          <div className="flex items-center gap-3">
++          <div className="flex items-center gap-3 flex-wrap">
+             <div className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white', qc.bg)}>
+-              {qc.label === 'Pass' ? <CheckCircle2 className="h-3.5 w-3.5" /> : qc.label === 'Fail' ? <XCircle className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}
++              {qc.label === 'Pass' ? (
++                <CheckCircle2 className="h-3.5 w-3.5" />
++              ) : qc.label === 'Fail' ? (
++                <XCircle className="h-3.5 w-3.5" />
++              ) : (
++                <Layers className="h-3.5 w-3.5" />
++              )}
+               QC: {qc.label}
+             </div>
+-            <button onClick={() => onQC(ev, 'pass')}
+-              className="h-8 px-3 rounded-[8px] bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 flex items-center gap-1">
++            <div
++              className={cn(
++                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border',
++                st.tone === 'ok' && 'bg-emerald-50 border-emerald-200 text-emerald-900',
++                st.tone === 'pending' && 'bg-amber-50 border-amber-200 text-amber-950',
++                st.tone === 'error' && 'bg-red-50 border-red-200 text-red-900',
++                st.tone === 'muted' && 'bg-slate-50 border-slate-200 text-slate-700',
++              )}
++            >
++              Record: {st.shortLabel}
++            </div>
++          </div>
++
++          <div className="flex items-center gap-3 flex-wrap">
++            <button
++              type="button"
++              onClick={() => onQC(ev, 'pass')}
++              className={cn('px-3 bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 flex items-center gap-1 rounded-xl', FIELD_CTRL_H)}
++            >
+               <CheckCircle2 className="h-3.5 w-3.5" /> Pass
+             </button>
+-            <button onClick={() => onQC(ev, 'fail')}
+-              className="h-8 px-3 rounded-[8px] bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 flex items-center gap-1">
++            <button
++              type="button"
++              onClick={() => onQC(ev, 'fail')}
++              className={cn('px-3 bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 flex items-center gap-1 rounded-xl', FIELD_CTRL_H)}
++            >
+               <XCircle className="h-3.5 w-3.5" /> Fail
+             </button>
+-            <button onClick={() => onLabel(ev)}
+-              className="h-8 px-3 rounded-[8px] bg-slate-900 text-white text-xs font-bold hover:bg-slate-700 flex items-center gap-1 ml-auto">
++            <button
++              type="button"
++              onClick={() => onLabel(ev)}
++              className={cn(BTN_PRIMARY, 'px-3 text-xs flex items-center gap-1 ml-auto', FIELD_CTRL_H)}
++            >
+               <Tag className="h-3.5 w-3.5" /> Label
+             </button>
+           </div>
+ 
+-          {/* Metadata */}
++          {storageNote && (
++            <p className={cn(FIELD_BODY, 'bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2')}>
++              {storageNote}
++            </p>
++          )}
++
+           <div>
+-            <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Metadata</p>
++            <p className={cn(FIELD_OVERLINE, 'mb-2')}>Metadata</p>
+             <table className="w-full">
+               <tbody>
+-                <ExifRow label="Type"       value={ev.evidence_type} />
+-                <ExifRow label="Captured"   value={fmtTs(ev.captured_at)} />
+-                <ExifRow label="Size"       value={ev.size_bytes ? `${(ev.size_bytes/1024).toFixed(0)} KB` : null} />
+-                <ExifRow label="MIME"       value={ev.content_type} />
+-                <ExifRow label="Step"       value={ev.runbook_step_id} />
+-                <ExifRow label="SHA-256"    value={ev.sha256 ? ev.sha256.slice(0,20) + '…' : null} />
+-                {hasGeo && <ExifRow label="Latitude"  value={ev.geo_lat?.toFixed(5)} />}
++                <ExifRow label="Type" value={ev.evidence_type} />
++                <ExifRow label="Save status" value={st.label} />
++                <ExifRow label="Captured" value={fmtTs(ev.captured_at)} />
++                <ExifRow label="Size" value={ev.size_bytes ? `${(ev.size_bytes / 1024).toFixed(0)} KB` : null} />
++                <ExifRow label="MIME" value={ev.content_type} />
++                <ExifRow label="Step" value={stepTitle || ev.runbook_step_id || null} />
++                <ExifRow label="SHA-256" value={ev.sha256 ? ev.sha256.slice(0, 20) + '…' : null} />
++                {hasGeo && <ExifRow label="Latitude" value={ev.geo_lat?.toFixed(5)} />}
+                 {hasGeo && <ExifRow label="Longitude" value={ev.geo_lon?.toFixed(5)} />}
+-                {hasGeo && <ExifRow label="Altitude"  value={ev.geo_altitude_m != null ? `${ev.geo_altitude_m} m` : null} />}
+-                {hasGeo && <ExifRow label="Accuracy"  value={ev.geo_accuracy_m != null ? `±${ev.geo_accuracy_m} m` : null} />}
+-                {exif.make  && <ExifRow label="Camera" value={`${exif.make} ${exif.model}`} />}
+-                {exif.iso   && <ExifRow label="ISO"    value={exif.iso} />}
+-                {exif.focal_mm && <ExifRow label="Focal"  value={`${exif.focal_mm} mm`} />}
+-                {exif.exposure_s && <ExifRow label="Exposure" value={`1/${Math.round(1/exif.exposure_s)}s`} />}
+-                {exif.width_px  && <ExifRow label="Resolution" value={`${exif.width_px}×${exif.height_px}`} />}
++                {hasGeo && (
++                  <ExifRow label="Altitude" value={ev.geo_altitude_m != null ? `${ev.geo_altitude_m} m` : null} />
++                )}
++                {hasGeo && (
++                  <ExifRow label="Accuracy" value={ev.geo_accuracy_m != null ? `±${ev.geo_accuracy_m} m` : null} />
++                )}
++                {exif.make && <ExifRow label="Camera" value={`${exif.make} ${exif.model}`} />}
++                {exif.iso && <ExifRow label="ISO" value={exif.iso} />}
++                {exif.focal_mm && <ExifRow label="Focal" value={`${exif.focal_mm} mm`} />}
++                {exif.exposure_s && <ExifRow label="Exposure" value={`1/${Math.round(1 / exif.exposure_s)}s`} />}
++                {exif.width_px && (
++                  <ExifRow label="Resolution" value={`${exif.width_px}×${exif.height_px}`} />
++                )}
+               </tbody>
+             </table>
+           </div>
+ 
+-          {/* Map marker */}
+           {hasGeo && (
+             <div>
+-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Location</p>
+-              <a href={`https://maps.google.com/?q=${ev.geo_lat},${ev.geo_lon}`} target="_blank" rel="noopener noreferrer"
+-                className="flex items-center gap-2 h-9 px-3 rounded-[8px] bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100">
++              <p className={cn(FIELD_OVERLINE, 'mb-2')}>Location</p>
++              <a
++                href={`https://maps.google.com/?q=${ev.geo_lat},${ev.geo_lon}`}
++                target="_blank"
++                rel="noopener noreferrer"
++                className={cn('flex items-center gap-2 px-3 bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100 rounded-xl', FIELD_CTRL_H)}
++              >
+                 <MapPin className="h-3.5 w-3.5" />
+                 {ev.geo_lat?.toFixed(5)}, {ev.geo_lon?.toFixed(5)} — Open in Maps
+               </a>
+@@ -139,7 +305,7 @@ function DetailModal({ ev, onClose, onLabel, onQC }) {
+ 
+           {ev.notes && (
+             <div>
+-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Notes</p>
++              <p className={cn(FIELD_OVERLINE, 'mb-1')}>Notes</p>
+               <p className="text-xs text-slate-600 leading-relaxed">{ev.notes}</p>
+             </div>
+           )}
+@@ -149,15 +315,35 @@ function DetailModal({ ev, onClose, onLabel, onQC }) {
+   );
+ }
+ 
+-export default function EvidenceGalleryView({ job, evidence, labels, adapters, onRefresh }) {
+-  const [showCapture,  setShowCapture]  = useState(false);
+-  const [selectedEv,   setSelectedEv]   = useState(null);
+-  const [labelerTarget,setLabelerTarget] = useState(null);
++/** Secondary context only — requirement completeness stays primary above and in the gallery buckets. */
++function RunbookStepSummary({ job, evidence }) {
++  const { stepGroups, jobLevel } = groupEvidenceByStepOrJob(job, evidence);
++  if (stepGroups.length === 0 && jobLevel.length === 0) return null;
++  const parts = stepGroups.map((g) => `${g.title} (${g.items.length})`);
++  if (jobLevel.length > 0) parts.unshift(`Job-level (${jobLevel.length})`);
++  if (parts.length === 0) return null;
++  return (
++    <p className="text-[11px] text-slate-500 leading-snug border-t border-slate-100 pt-3 mt-1">
++      <span className="text-slate-400">Optional runbook links — </span>
++      {parts.join(' · ')}
++    </p>
++  );
++}
++
++export default function EvidenceGalleryView({ job, evidence, labels: _labels, adapters, onRefresh }) {
++  const [showCapture, setShowCapture] = useState(false);
++  const [captureFocus, setCaptureFocus] = useState({ evidenceType: null, stepId: null });
++  const [captureNonce, setCaptureNonce] = useState(0);
++  const [selectedEv, setSelectedEv] = useState(null);
++  const [labelerTarget, setLabelerTarget] = useState(null);
+   const qc = useQueryClient();
+ 
+   const qcMutation = useMutation({
+     mutationFn: ({ id, verdict }) => base44.entities.Evidence.update(id, { qc_status: verdict }),
+-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['fj-evidence', job.id] }); onRefresh?.(); },
++    onSuccess: () => {
++      qc.invalidateQueries({ queryKey: ['fj-evidence', job.id] });
++      onRefresh?.();
++    },
+   });
+ 
+   const handleQC = (ev, verdict) => {
+@@ -170,50 +356,112 @@ export default function EvidenceGalleryView({ job, evidence, labels, adapters, o
+     setLabelerTarget(ev);
+   };
+ 
+-  const typeGroups = {};
+-  evidence.forEach(e => {
+-    const t = e.evidence_type || 'general';
+-    if (!typeGroups[t]) typeGroups[t] = [];
+-    typeGroups[t].push(e);
+-  });
++  const openCapture = (opts = {}) => {
++    setCaptureFocus({ evidenceType: opts.evidenceType ?? null, stepId: opts.stepId ?? null });
++    setCaptureNonce((n) => n + 1);
++    setShowCapture(true);
++  };
++
++  const hasReqs = Array.isArray(job?.evidence_requirements) && job.evidence_requirements.length > 0;
++  const { rows: reqRows, other } = assignEvidenceToRequirements(job, evidence);
++
++  const gallerySections = hasReqs
++    ? [
++        ...reqRows.map(({ req, items }) => ({
++          key: `req-${req.type}`,
++          title: (req.label || req.type || '').replace(/_/g, ' '),
++          subtitle: `${items.length} attached`,
++          items,
++        })),
++        ...(other.length > 0
++          ? [{ key: 'other', title: 'Other evidence', subtitle: `${other.length} items`, items: other }]
++          : []),
++      ]
++    : Object.entries(
++        evidence.reduce((acc, e) => {
++          const t = e.evidence_type || 'general';
++          if (!acc[t]) acc[t] = [];
++          acc[t].push(e);
++          return acc;
++        }, {}),
++      ).map(([type, items]) => ({
++        key: `type-${type}`,
++        title: type.replace(/_/g, ' '),
++        subtitle: `${items.length}`,
++        items,
++      }));
+ 
+   return (
+     <div className="space-y-4">
+-      {/* Add Evidence */}
+-      <button onClick={() => setShowCapture(true)}
+-        className="w-full h-11 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 text-sm font-semibold flex items-center justify-center gap-2 hover:border-slate-500 hover:text-slate-700 transition-colors">
++      <div>
++        <p className={cn(FIELD_OVERLINE, 'mb-1')}>Evidence for this job</p>
++        <EvidenceRequirementsPanel job={job} evidence={evidence} onAddForRequirement={(type) => openCapture({ evidenceType: type })} />
++      </div>
++
++      <button
++        type="button"
++        onClick={() => openCapture({})}
++        className="w-full h-11 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 text-sm font-semibold flex items-center justify-center gap-2 hover:border-slate-500 hover:text-slate-700 transition-colors"
++      >
+         <Plus className="h-4 w-4" /> Add Evidence
+       </button>
+ 
+-      {/* Gallery by type */}
+-      {Object.entries(typeGroups).map(([type, items]) => (
+-        <div key={type}>
+-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 capitalize">
+-            {type.replace(/_/g,' ')} <span className="font-normal text-slate-300">({items.length})</span>
++      {!hasReqs && evidence.length > 0 && (
++        <p className="text-[11px] text-slate-500">
++          Showing items by evidence type. Link items to runbook steps when you capture (if this job has embedded
++          steps).
++        </p>
++      )}
++
++      {gallerySections.map((section) => (
++        <div key={section.key}>
++          <p className={cn(FIELD_OVERLINE, 'mb-2 capitalize')}>
++            {section.title}{' '}
++            <span className="font-normal text-slate-300 normal-case">({section.subtitle})</span>
+           </p>
+-          <div className="grid grid-cols-3 gap-2">
+-            {items.map(ev => (
+-              <Thumbnail key={ev.id} ev={ev} onClick={setSelectedEv} />
+-            ))}
+-          </div>
++          {section.items.length === 0 ? (
++            <p className="text-xs text-slate-400 py-2 pl-0.5">No items in this bucket yet.</p>
++          ) : (
++            <div className="grid grid-cols-3 gap-2">
++              {section.items.map((ev) => (
++                <Thumbnail key={ev.id} ev={ev} job={job} onClick={setSelectedEv} />
++              ))}
++            </div>
++          )}
+         </div>
+       ))}
+ 
+       {evidence.length === 0 && (
+-        <div className="py-16 text-center text-slate-400 text-sm">No evidence yet — tap Add Evidence to start.</div>
++        <div className="py-16 text-center text-slate-400 text-sm">
++          No evidence yet — tap Add Evidence to choose type and optional runbook step.
++        </div>
+       )}
+ 
+-      {/* Modals */}
++      {evidence.length > 0 && <RunbookStepSummary job={job} evidence={evidence} />}
++
+       {showCapture && (
+         <EvidenceCaptureModal
++          key={captureNonce}
+           jobId={job.id}
++          job={job}
++          initialEvidenceType={captureFocus.evidenceType}
++          initialRunbookStepId={captureFocus.stepId}
+           adapter={adapters?.upload}
+           onClose={() => setShowCapture(false)}
+-          onSuccess={() => { setShowCapture(false); onRefresh?.(); }}
++          onSuccess={() => {
++            setShowCapture(false);
++            onRefresh?.();
++          }}
+         />
+       )}
+       {selectedEv && (
+-        <DetailModal ev={selectedEv} onClose={() => setSelectedEv(null)} onLabel={handleLabel} onQC={handleQC} />
++        <DetailModal
++          ev={selectedEv}
++          job={job}
++          onClose={() => setSelectedEv(null)}
++          onLabel={handleLabel}
++          onQC={handleQC}
++        />
+       )}
+       {labelerTarget && (
+         <LabelerModal
+@@ -221,9 +469,12 @@ export default function EvidenceGalleryView({ job, evidence, labels, adapters, o
+           jobId={job.id}
+           adapter={adapters?.label}
+           onClose={() => setLabelerTarget(null)}
+-          onSuccess={() => { setLabelerTarget(null); onRefresh?.(); }}
++          onSuccess={() => {
++            setLabelerTarget(null);
++            onRefresh?.();
++          }}
+         />
+       )}
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/components/fieldv2/FieldTimeTracker.jsx b/src/components/fieldv2/FieldTimeTracker.jsx
+index 6083edb..9be5038 100644
+--- a/src/components/fieldv2/FieldTimeTracker.jsx
++++ b/src/components/fieldv2/FieldTimeTracker.jsx
+@@ -1,189 +1,184 @@
+ /**
+- * FieldTimeTracker — TimeLog tab (G)
+- * Clock-in/out, manual entry, and activity log.
+- * Persists to Activity + AuditLog.
++ * FieldTimeTracker — Work session via TimeEntry (work_start / work_stop), aligned with TimerPanel seams.
++ * Embedded in Job Overview. Session state is derived from time entries + job lifecycle, not local clock truth.
+  */
+-import React, { useState } from 'react';
++import React, { useState, useEffect, useMemo } from 'react';
+ import { useMutation, useQueryClient } from '@tanstack/react-query';
+-import { Play, Square, Plus, Clock, Loader2, Edit3 } from 'lucide-react';
++import { Play, Square, Loader2 } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+-import { format, parseISO } from 'date-fns';
+ import { toast } from 'sonner';
+-import { uuidv4 } from '@/lib/uuid';
+-import { defaultAdapters } from '@/lib/fieldAdapters';
++import { apiClient } from '@/api/client';
+ import { useAuth } from '@/lib/AuthContext';
+-import { emitArrivalForClockIn } from '@/lib/travelArrivalEvent';
++import { telemetryTimeClockStart, telemetryTimeClockStop } from '@/lib/telemetry';
++import { emitCanonicalEventsForTimeEntry } from '@/lib/travelArrivalEvent';
+ import { PreArrivalAckSheet } from '@/components/field/AcknowledgementSheets.jsx';
++import {
++  deriveTimerSessionFromTimeEntries,
++  formatWorkedDuration,
++} from '@/lib/fieldJobExecutionModel';
++import {
++  FIELD_BADGE_NEUTRAL,
++  FIELD_BODY,
++  FIELD_CARD,
++  FIELD_CTRL_H,
++  FIELD_OVERLINE,
++} from '@/lib/fieldVisualTokens';
+ 
+-const EVENT_TYPES = ['clock_in','clock_out','start_step','end_step','upload','label','note_added'];
+-const EVENT_ICON = {
+-  clock_in:  '🟢', clock_out: '🔴', start_step: '▶️',
+-  end_step:  '✅', upload:    '📷', label:      '🏷️', note_added:'📝',
+-};
+-
+-function fmtTs(ts) { try { return format(parseISO(ts), 'MMM d HH:mm:ss'); } catch { return ts || '—'; } }
+-
+-function ActivityRow({ a }) {
+-  return (
+-    <div className="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0">
+-      <span className="text-base mt-0.5 flex-shrink-0">{EVENT_ICON[a.event_type] || '⚡'}</span>
+-      <div className="flex-1 min-w-0">
+-        <p className="text-xs font-bold text-slate-800 capitalize">{a.event_type?.replace(/_/g,' ')}</p>
+-        <p className="text-[10px] text-slate-400 truncate">{a.user_id}</p>
+-        {a.meta?.note && <p className="text-[11px] text-slate-500 mt-0.5 italic">"{a.meta.note}"</p>}
+-      </div>
+-      <span className="text-[10px] text-slate-400 font-mono flex-shrink-0">{fmtTs(a.timestamp)}</span>
+-    </div>
+-  );
++function makeClientId() {
++  return `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+ }
+ 
+-export default function FieldTimeTracker({ job, activities, adapters, onRefresh }) {
+-  const adapter = adapters?.activity || defaultAdapters.activity;
+-  const { user } = useAuth();
+-  const [clocked,   setClockedIn]  = useState(() => activities.some(a => a.event_type === 'clock_in'));
+-  const [showManual,setShowManual] = useState(false);
++export default function FieldTimeTracker({
++  job,
++  timeEntries = [],
++  executionView,
++  onRefresh,
++  variant = 'default',
++}) {
++  const { user } = useAuth(); // required for emitCanonicalEventsForTimeEntry(work_start)
+   const [arrivalAckOpen, setArrivalAckOpen] = useState(false);
+-  const [manualType,setManualType] = useState('note_added');
+-  const [manualNote,setManualNote] = useState('');
+-  const [manualTs,  setManualTs]   = useState('');
++  const [tick, setTick] = useState(0);
+   const qc = useQueryClient();
+ 
+-  const log = useMutation({
+-    mutationFn: data => adapter.logActivity(data, 'admin@purpulse.com'),
+-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['fj-activities', job.id] }); onRefresh?.(); },
++  useEffect(() => {
++    if (!executionView?.timer?.workSegmentOpen) return;
++    const id = setInterval(() => setTick((t) => t + 1), 1000);
++    return () => clearInterval(id);
++  }, [executionView?.timer?.workSegmentOpen]);
++
++  const liveTimer = useMemo(() => {
++    void tick;
++    return deriveTimerSessionFromTimeEntries(timeEntries);
++  }, [timeEntries, tick]);
++
++  const createEntry = useMutation({
++    mutationFn: async ({ entryType, timestamp }) =>
++      apiClient.createTimeEntry(job.id, {
++        job_id: job.id,
++        entry_type: entryType,
++        timestamp,
++        source: 'app',
++        sync_status: 'pending',
++        locked: false,
++        client_request_id: makeClientId(),
++      }),
++    onSuccess: (_, { entryType }) => {
++      qc.invalidateQueries({ queryKey: ['fj-time-entries', job.id] });
++      onRefresh?.();
++      if (entryType === 'work_start') toast.success('Work timer started');
++      if (entryType === 'work_stop') toast.success('Work timer stopped');
++    },
++    onError: (e) => {
++      toast.error(e instanceof Error ? e.message : 'Could not save time entry');
++    },
+   });
+ 
+-  const performClockIn = async (arrivalScopeAcknowledgements) => {
++  const performWorkStart = async (arrivalScopeAcknowledgements) => {
+     const ts = new Date().toISOString();
+     try {
+-      await emitArrivalForClockIn({ job, user, timestamp: ts, arrivalScopeAcknowledgements });
++      await emitCanonicalEventsForTimeEntry({
++        job,
++        user,
++        entryType: 'work_start',
++        timestamp: ts,
++        travelMinutes: null,
++        location: null,
++        etaAckTimestamp: null,
++        arrivalScopeAcknowledgements: arrivalScopeAcknowledgements ?? null,
++      });
+     } catch (e) {
+-      toast.error(e instanceof Error ? e.message : 'Could not queue arrival telemetry');
++      toast.error(e instanceof Error ? e.message : 'Could not queue arrival/work telemetry');
+       return;
+     }
+-    log.mutate({
+-      id:              uuidv4(),
+-      event_type:      'clock_in',
+-      user_id:         'admin@purpulse.com',
+-      work_order_id:   job.id,
+-      timestamp:       ts,
+-      meta:            { device_id: 'device-web', app_version: '2.4.1' },
+-    });
+-    setClockedIn(true);
+-    toast.success('Clocked in');
+-  };
+-
+-  const handleClockOut = () => {
+-    log.mutate({
+-      id:              uuidv4(),
+-      event_type:      'clock_out',
+-      user_id:         'admin@purpulse.com',
+-      work_order_id:   job.id,
+-      timestamp:       new Date().toISOString(),
+-      meta:            { device_id: 'device-web', app_version: '2.4.1' },
+-    });
+-    setClockedIn(false);
+-    toast.success('Clocked out');
++    telemetryTimeClockStart(job.id, 'work_start');
++    createEntry.mutate({ entryType: 'work_start', timestamp: ts });
++    setArrivalAckOpen(false);
+   };
+ 
+-  const handleManualSubmit = () => {
+-    if (!manualTs && !manualNote) { toast.error('Add a timestamp or note'); return; }
+-    log.mutate({
+-      id:            uuidv4(),
+-      event_type:    manualType,
+-      user_id:       'admin@purpulse.com',
+-      work_order_id: job.id,
+-      timestamp:     manualTs ? new Date(manualTs).toISOString() : new Date().toISOString(),
+-      meta:          { note: manualNote || undefined },
+-      session_id:    'manual-' + uuidv4().slice(0,8),
+-    });
+-    setManualNote(''); setManualTs(''); setShowManual(false);
+-    toast.success('Activity logged');
++  const performWorkStop = () => {
++    const ts = new Date().toISOString();
++    telemetryTimeClockStop(job.id, 'work_stop', liveTimer.workedSeconds);
++    createEntry.mutate({ entryType: 'work_stop', timestamp: ts });
+   };
+ 
+-  const sorted = [...activities].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
++  const embedded = variant === 'embedded';
++  const { canClockIn, canClockOut, clockInDisabledReason } = executionView;
++  const workedLabel = formatWorkedDuration(liveTimer.workedSeconds);
+ 
+   return (
+-    <div className="space-y-4">
++    <div className={embedded ? 'space-y-3' : 'space-y-4'}>
+       <PreArrivalAckSheet
+         open={arrivalAckOpen}
+         onOpenChange={setArrivalAckOpen}
+         jobLabel={job?.title}
+         onConfirm={(ackState) => {
+-          void performClockIn(ackState);
++          void performWorkStart(ackState);
+         }}
+       />
+ 
+-      {/* Clock in/out */}
+-      <div className="bg-white rounded-xl border border-slate-100 p-4">
+-        <div className="flex items-center justify-between mb-3">
+-          <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Session Control</p>
+-          <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', clocked ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500')}>
+-            {clocked ? '● Clocked In' : '○ Off Clock'}
++      <div className={cn(FIELD_CARD, embedded ? 'p-3' : 'p-4')}>
++        <div className={cn('flex items-center justify-between gap-2', embedded ? 'mb-2' : 'mb-3')}>
++          <p className={FIELD_OVERLINE}>
++            Work timer
++          </p>
++          <span
++            className={cn(
++              'text-[10px] font-bold px-2 py-0.5 rounded-full tabular-nums border-0',
++              liveTimer.workSegmentOpen
++                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100/80'
++                : FIELD_BADGE_NEUTRAL
++            )}
++          >
++            {liveTimer.workSegmentOpen ? '● Running' : '○ Stopped'}
+           </span>
+         </div>
++        <p
++          className={cn(
++            'font-mono font-bold text-slate-800 tabular-nums mb-2',
++            embedded ? 'text-sm' : 'text-base'
++          )}
++        >
++          {workedLabel}
++          <span className="text-[10px] font-sans font-semibold text-slate-400 ml-2 normal-case">
++            on this job
++          </span>
++        </p>
++        <p className={cn(FIELD_BODY, 'mb-3')}>{executionView.sessionSummaryLine}</p>
+         <div className="flex gap-2">
+-          <button onClick={() => setArrivalAckOpen(true)} disabled={clocked || log.isPending}
+-            className="flex-1 h-11 rounded-[8px] bg-emerald-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-emerald-700 transition-colors">
+-            <Play className="h-4 w-4" /> Clock In
++          <button
++            type="button"
++            onClick={() => setArrivalAckOpen(true)}
++            disabled={!canClockIn || createEntry.isPending}
++            title={!canClockIn ? clockInDisabledReason || undefined : undefined}
++            className={cn(
++              'flex-1 rounded-xl bg-emerald-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-emerald-700 transition-colors',
++              embedded ? 'h-9 text-xs' : cn(FIELD_CTRL_H, 'text-sm')
++            )}
++          >
++            <Play className={embedded ? 'h-3.5 w-3.5' : 'h-4 w-4'} /> Start timer
+           </button>
+-          <button onClick={handleClockOut} disabled={!clocked || log.isPending}
+-            className="flex-1 h-11 rounded-[8px] bg-red-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-red-700 transition-colors">
+-            <Square className="h-4 w-4" /> Clock Out
++          <button
++            type="button"
++            onClick={performWorkStop}
++            disabled={!canClockOut || createEntry.isPending}
++            className={cn(
++              'flex-1 rounded-xl bg-red-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-red-700 transition-colors',
++              embedded ? 'h-9 text-xs' : cn(FIELD_CTRL_H, 'text-sm')
++            )}
++          >
++            {createEntry.isPending ? (
++              <Loader2 className="h-3.5 w-3.5 animate-spin" />
++            ) : (
++              <>
++                <Square className={embedded ? 'h-3.5 w-3.5' : 'h-4 w-4'} /> Stop timer
++              </>
++            )}
+           </button>
+         </div>
+-      </div>
+-
+-      {/* Manual entry */}
+-      <div className="bg-white rounded-xl border border-slate-100">
+-        <button onClick={() => setShowManual(s => !s)}
+-          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-slate-50 transition-colors rounded-xl">
+-          <Edit3 className="h-4 w-4 text-slate-400" />
+-          <p className="text-sm font-bold text-slate-700 flex-1">Manual Entry</p>
+-          <Plus className={cn('h-4 w-4 text-slate-400 transition-transform', showManual && 'rotate-45')} />
+-        </button>
+-        {showManual && (
+-          <div className="px-4 pb-4 space-y-3 border-t border-slate-50">
+-            <div className="pt-2 grid grid-cols-2 gap-3">
+-              <div>
+-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Event Type</label>
+-                <select value={manualType} onChange={e => setManualType(e.target.value)}
+-                  className="w-full h-9 rounded-lg border border-slate-200 text-xs font-semibold px-3 focus:outline-none focus:ring-1 focus:ring-slate-400 capitalize bg-white">
+-                  {EVENT_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g,' ')}</option>)}
+-                </select>
+-              </div>
+-              <div>
+-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Timestamp</label>
+-                <input type="datetime-local" value={manualTs} onChange={e => setManualTs(e.target.value)}
+-                  className="w-full h-9 rounded-lg border border-slate-200 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-slate-400" />
+-              </div>
+-            </div>
+-            <div>
+-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Note</label>
+-              <input value={manualNote} onChange={e => setManualNote(e.target.value)}
+-                placeholder="Optional note…"
+-                className="w-full h-9 rounded-lg border border-slate-200 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-slate-400" />
+-            </div>
+-            <button onClick={handleManualSubmit} disabled={log.isPending}
+-              className="w-full h-10 rounded-lg bg-slate-900 text-white text-xs font-bold flex items-center justify-center gap-2 hover:bg-slate-700 disabled:opacity-50">
+-              {log.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Plus className="h-3.5 w-3.5" /> Log Activity</>}
+-            </button>
+-          </div>
++        {!canClockIn && clockInDisabledReason && (
++          <p className={cn(FIELD_BODY, 'mt-2')}>{clockInDisabledReason}</p>
+         )}
+       </div>
+-
+-      {/* Activity log */}
+-      <div className="bg-white rounded-xl border border-slate-100">
+-        <div className="px-4 py-2.5 border-b border-slate-50 flex items-center gap-2">
+-          <Clock className="h-3.5 w-3.5 text-slate-400" />
+-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Activity Log ({sorted.length})</p>
+-        </div>
+-        <div className="px-4 py-2 max-h-72 overflow-y-auto">
+-          {sorted.length === 0 ? (
+-            <p className="text-center text-slate-400 text-xs py-6">No activities yet.</p>
+-          ) : sorted.map(a => <ActivityRow key={a.id} a={a} />)}
+-        </div>
+-      </div>
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/components/fieldv2/JobOverview.jsx b/src/components/fieldv2/JobOverview.jsx
+index b78bdc4..c6dd0fc 100644
+--- a/src/components/fieldv2/JobOverview.jsx
++++ b/src/components/fieldv2/JobOverview.jsx
+@@ -1,35 +1,26 @@
+ /**
+- * JobOverview — Overview tab (B)
+- * Shows job metadata, status, SOW, assigned techs.
+- * Action buttons: Start Job, Complete Job, Snapshot SOW.
++ * JobOverview — Job context, lifecycle transitions (authoritative), work timer, site/contact.
+  */
+-import React, { useState } from 'react';
+-import { useMutation, useQueryClient } from '@tanstack/react-query';
+-import { base44 } from '@/api/base44Client';
+-import { useAuth } from '@/lib/AuthContext';
++import React from 'react';
+ import {
+   MapPin, Phone, Mail, User, Clock, Building2,
+-  Play, CheckCircle, AlertTriangle, FileText,
+-  Lock,
++  AlertTriangle, FileText,
+ } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+ import { format, parseISO } from 'date-fns';
+-import { toast } from 'sonner';
++import FieldTimeTracker from './FieldTimeTracker';
+ import JobStateTransitioner from './JobStateTransitioner';
+-import PreJobToolCheckModal from './PreJobToolCheckModal';
+-import { emitDispatchEventForJobStatusChange } from '@/lib/dispatchEvent';
+-
+-const STATUS_CFG = {
+-  assigned:         { label: 'Assigned',    bg: 'bg-slate-100',  text: 'text-slate-600'  },
+-  en_route:         { label: 'En Route',    bg: 'bg-cyan-50',    text: 'text-cyan-700'   },
+-  checked_in:       { label: 'Checked In',  bg: 'bg-purple-50',  text: 'text-purple-700' },
+-  in_progress:      { label: 'In Progress', bg: 'bg-blue-50',    text: 'text-blue-700'   },
+-  paused:           { label: 'Paused',      bg: 'bg-amber-50',   text: 'text-amber-700'  },
+-  pending_closeout: { label: 'Closeout',    bg: 'bg-orange-50',  text: 'text-orange-700' },
+-  submitted:        { label: 'Submitted',   bg: 'bg-green-50',   text: 'text-green-700'  },
+-  approved:         { label: 'Approved',    bg: 'bg-emerald-50', text: 'text-emerald-700'},
+-  rejected:         { label: 'Rejected',    bg: 'bg-red-50',     text: 'text-red-700'    },
+-};
++import FieldSectionCard from './FieldSectionCard';
++import { LIFECYCLE_DISPLAY } from '@/lib/fieldJobExecutionModel';
++import {
++  FIELD_BODY,
++  FIELD_INNER_STACK,
++  FIELD_LINK_PRIMARY,
++  FIELD_LINK_SECONDARY,
++  FIELD_META_MONO,
++  FIELD_OVERLINE,
++  FIELD_STACK_GAP,
++} from '@/lib/fieldVisualTokens';
+ 
+ function InfoRow({ icon: Icon, label, children, href }) {
+   const inner = (
+@@ -38,8 +29,8 @@ function InfoRow({ icon: Icon, label, children, href }) {
+         <Icon className="h-3.5 w-3.5 text-slate-400" />
+       </div>
+       <div>
+-        <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{label}</p>
+-        <div className="text-xs text-slate-700 font-semibold leading-snug mt-px">{children}</div>
++        <p className={FIELD_OVERLINE}>{label}</p>
++        <div className={cn(FIELD_BODY, 'font-semibold text-slate-700 mt-px')}>{children}</div>
+       </div>
+     </div>
+   );
+@@ -47,203 +38,176 @@ function InfoRow({ icon: Icon, label, children, href }) {
+   return <div>{inner}</div>;
+ }
+ 
+-function Card({ title, children }) {
+-  return (
+-    <div className="bg-white rounded-xl border border-slate-100">
+-      {title && <div className="px-4 py-2.5 border-b border-slate-50"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{title}</p></div>}
+-      <div className="p-4 space-y-3">{children}</div>
+-    </div>
+-  );
++function fmtTs(ts) {
++  try {
++    return format(parseISO(ts), 'MMM d, yyyy HH:mm');
++  } catch {
++    return ts || '—';
++  }
+ }
+ 
+-function fmtTs(ts) { try { return format(parseISO(ts), 'MMM d, yyyy HH:mm'); } catch { return ts || '—'; } }
+-
+-export default function JobOverview({ job, evidence, labels, onRefresh }) {
+-  const [snapshotting, setSnapshotting] = useState(false);
+-  const [toolCheckOpen, setToolCheckOpen] = useState(false);
+-  const { permissions, user } = useAuth();
+-  const qc = useQueryClient();
+-
+-  // Determine if runbook is complete
+-  const runbookComplete = job?.runbook_phases?.every(phase =>
+-    phase.steps?.every(step => step.completed)
+-  ) ?? false;
+-
+-  // Check if signature is present
+-  const hasSignature = !!job?.signoff_signature_url;
+-
+-  const updateMutation = useMutation({
+-    mutationFn: async ({ status }) => {
+-      await emitDispatchEventForJobStatusChange({
+-        job,
+-        targetAppStatus: status,
+-        user,
+-      });
+-      const now = new Date().toISOString();
+-      const extra = status === 'in_progress' ? { work_start_time: now, check_in_time: now } :
+-                    status === 'pending_closeout' ? { work_end_time: now } : {};
+-      return base44.entities.Job.update(job.id, { status, ...extra });
+-    },
+-    onSuccess: (_, { status }) => {
+-      qc.invalidateQueries({ queryKey: ['fj-job', job.id] });
+-      onRefresh?.();
+-      toast.success(`Job marked as ${status.replace(/_/g, ' ')}`);
+-    },
+-    onError: (e) => {
+-      toast.error(e instanceof Error ? e.message : 'Could not update job');
+-    },
+-  });
+-
+-  const handleStatusChange = (status) => {
+-    updateMutation.mutate({ status });
+-  };
+-
+-  const handleStartJobAfterToolCheck = () => {
+-    handleStatusChange('in_progress');
+-  };
+-
+-  const handleSnapshotSOW = async () => {
+-    setSnapshotting(true);
+-    await new Promise(r => setTimeout(r, 600));
+-    setSnapshotting(false);
+-    toast.success('SOW snapshot created (mock) — version pinned to current runbook.');
+-  };
+-
+-  const stat = STATUS_CFG[job.status] || STATUS_CFG.assigned;
+-  const canStart    = ['assigned', 'en_route', 'checked_in', 'paused'].includes(job.status);
+-  const canComplete = ['in_progress', 'checked_in'].includes(job.status);
++export default function JobOverview({
++  job,
++  timeEntries = [],
++  executionView,
++  evidence,
++  onRefresh,
++  onNavigateToSection,
++  runbookComplete,
++  hasSignature,
++}) {
++  const stat = LIFECYCLE_DISPLAY[job.status] || LIFECYCLE_DISPLAY.assigned;
+ 
+   return (
+-    <div className="space-y-3">
+-      <PreJobToolCheckModal
+-        open={toolCheckOpen}
+-        onOpenChange={setToolCheckOpen}
+-        job={job}
+-        user={user}
+-        onPassed={handleStartJobAfterToolCheck}
+-      />
+-
+-      {/* Status + actions */}
+-      <Card>
+-        <div className="flex items-center justify-between">
+-          <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold', stat.bg, stat.text)}>
+-            {stat.label}
+-          </span>
+-          <span className="text-[10px] text-slate-400 font-mono">{job.sync_status}</span>
+-        </div>
+-        {job.description && <p className="text-xs text-slate-600 leading-relaxed">{job.description}</p>}
+-        <div className="flex flex-wrap gap-2 pt-1">
+-          {canStart && permissions?.canCompleteJob && (
+-            <button
+-              onClick={() => {
+-                if (job.status === 'paused') handleStatusChange('in_progress');
+-                else setToolCheckOpen(true);
+-              }}
+-              disabled={updateMutation.isPending}
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors"
++    <div className={FIELD_STACK_GAP}>
++      <FieldSectionCard>
++        <div className={cn(FIELD_INNER_STACK)}>
++          <div className="flex items-center justify-between">
++            <span
++              className={cn(
++                'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold',
++                stat.pillBg,
++                stat.pillText
++              )}
+             >
+-              <Play className="h-3.5 w-3.5" /> Start Job
+-            </button>
+-          )}
+-          {canStart && !permissions?.canCompleteJob && (
+-            <button disabled title="Permission required"
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed">
+-              <Lock className="h-3.5 w-3.5" /> Start Job
+-            </button>
+-          )}
+-          {canComplete && permissions?.canCompleteJob && (
+-            <button onClick={() => handleStatusChange('pending_closeout')} disabled={updateMutation.isPending}
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+-              <CheckCircle className="h-3.5 w-3.5" /> Complete Job
+-            </button>
+-          )}
+-          {canComplete && !permissions?.canCompleteJob && (
+-            <button disabled title="Permission required"
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed">
+-              <Lock className="h-3.5 w-3.5" /> Complete Job
+-            </button>
++              {stat.label}
++            </span>
++            <span className={FIELD_META_MONO}>{job.sync_status}</span>
++          </div>
++          {job.description && (
++            <p className={FIELD_BODY}>{job.description}</p>
+           )}
+-          {permissions?.canEditJob && (
+-            <button onClick={handleSnapshotSOW} disabled={snapshotting}
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-slate-900 text-white text-xs font-bold hover:bg-slate-700 disabled:opacity-50 transition-colors">
+-              <FileText className="h-3.5 w-3.5" />
+-              {snapshotting ? 'Snapshotting…' : 'Snapshot SOW'}
+-            </button>
++          {(job.status === 'in_progress' || job.status === 'checked_in') && onNavigateToSection && (
++            <div className="pt-3 border-t border-slate-100 flex flex-wrap gap-x-4 gap-y-2">
++              <button
++                type="button"
++                onClick={() => onNavigateToSection('runbook')}
++                className={FIELD_LINK_PRIMARY}
++              >
++                Open Runbook
++              </button>
++              <button
++                type="button"
++                onClick={() => onNavigateToSection('evidence')}
++                className={FIELD_LINK_PRIMARY}
++              >
++                Open Evidence
++              </button>
++              <button
++                type="button"
++                onClick={() => onNavigateToSection('closeout')}
++                className={FIELD_LINK_SECONDARY}
++              >
++                Closeout
++              </button>
++            </div>
+           )}
+         </div>
+-      </Card>
++      </FieldSectionCard>
+ 
+-      {/* State Machine */}
+-      <JobStateTransitioner
+-        job={job}
+-        evidence={evidence}
+-        runbookComplete={runbookComplete}
+-        hasSignature={hasSignature}
+-        onTransitionSuccess={onRefresh}
+-      />
++      <div>
++        <p className={cn(FIELD_OVERLINE, 'mb-2 px-0.5')}>
++          Job state
++        </p>
++        <p className="text-[11px] text-slate-500 mb-2 px-0.5 leading-snug">
++          Use this section to update travel, check-in, work, pause, and completion status.
++        </p>
++        <JobStateTransitioner
++          job={job}
++          evidence={evidence}
++          runbookComplete={runbookComplete}
++          hasSignature={hasSignature}
++          onTransitionSuccess={onRefresh}
++        />
++      </div>
+ 
+-      {/* Hazards */}
+       {job.hazards && (
+         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+           <div className="flex items-center gap-2 mb-1.5">
+             <AlertTriangle className="h-4 w-4 text-red-600" />
+-            <p className="text-xs font-black text-red-800 uppercase tracking-wide">Hazards</p>
++            <p className={cn(FIELD_OVERLINE, 'text-red-800')}>Hazards</p>
+           </div>
+           <p className="text-xs text-red-700 leading-relaxed">{job.hazards}</p>
+         </div>
+       )}
+ 
+-      {/* Work order details */}
+-      <Card title="Work Order">
+-        {job.external_id   && <InfoRow icon={FileText}   label="WO Number">{job.external_id}</InfoRow>}
+-        {job.project_name  && <InfoRow icon={Building2}  label="Project">{job.project_name}</InfoRow>}
+-        {job.assigned_to   && <InfoRow icon={User}       label="Assigned To">{job.assigned_to}</InfoRow>}
+-        {job.scheduled_date && (
+-          <InfoRow icon={Clock} label="Scheduled">{fmtTs(`${job.scheduled_date}T${job.scheduled_time || '00:00'}:00`)}</InfoRow>
+-        )}
+-        {job.work_start_time && <InfoRow icon={Clock} label="Actual Start">{fmtTs(job.work_start_time)}</InfoRow>}
+-        {job.work_end_time   && <InfoRow icon={Clock} label="Actual End">{fmtTs(job.work_end_time)}</InfoRow>}
+-      </Card>
+-
+-      {/* Site */}
+-      {(job.site_name || job.site_address) && (
+-        <Card title="Site">
+-          {job.site_name    && <InfoRow icon={Building2} label="Site">{job.site_name}</InfoRow>}
+-          {job.site_address && (
+-            <InfoRow icon={MapPin} label="Address">
+-              <a href={`https://maps.google.com/?q=${encodeURIComponent(job.site_address)}`} target="_blank" rel="noopener noreferrer"
+-                className="text-blue-600">{job.site_address}</a>
++      <FieldSectionCard title="Work Order">
++        <div className={FIELD_INNER_STACK}>
++          {job.external_id && <InfoRow icon={FileText} label="WO Number">{job.external_id}</InfoRow>}
++          {job.project_name && <InfoRow icon={Building2} label="Project">{job.project_name}</InfoRow>}
++          {job.assigned_to && <InfoRow icon={User} label="Assigned To">{job.assigned_to}</InfoRow>}
++          {job.scheduled_date && (
++            <InfoRow icon={Clock} label="Scheduled">
++              {fmtTs(`${job.scheduled_date}T${job.scheduled_time || '00:00'}:00`)}
+             </InfoRow>
+           )}
+-        </Card>
++          {job.work_start_time && (
++            <InfoRow icon={Clock} label="Actual Start">
++              {fmtTs(job.work_start_time)}
++            </InfoRow>
++          )}
++          {job.work_end_time && (
++            <InfoRow icon={Clock} label="Actual End">
++              {fmtTs(job.work_end_time)}
++            </InfoRow>
++          )}
++        </div>
++      </FieldSectionCard>
++
++      {(job.site_name || job.site_address) && (
++        <FieldSectionCard title="Site">
++          <div className={FIELD_INNER_STACK}>
++            {job.site_name && <InfoRow icon={Building2} label="Site">{job.site_name}</InfoRow>}
++            {job.site_address && (
++              <InfoRow icon={MapPin} label="Address">
++                <a
++                  href={`https://maps.google.com/?q=${encodeURIComponent(job.site_address)}`}
++                  target="_blank"
++                  rel="noopener noreferrer"
++                  className="text-blue-600"
++                >
++                  {job.site_address}
++                </a>
++              </InfoRow>
++            )}
++          </div>
++        </FieldSectionCard>
+       )}
+ 
+-      {/* Contact */}
+       {(job.contact_name || job.contact_phone) && (
+-        <Card title="Contact">
+-          {job.contact_name  && <InfoRow icon={User}  label="Name">{job.contact_name}</InfoRow>}
+-          {job.contact_phone && <InfoRow icon={Phone} label="Phone" href={`tel:${job.contact_phone}`}>
+-            <span className="text-blue-600">{job.contact_phone}</span></InfoRow>}
+-          {job.contact_email && <InfoRow icon={Mail}  label="Email" href={`mailto:${job.contact_email}`}>
+-            <span className="text-blue-600">{job.contact_email}</span></InfoRow>}
+-        </Card>
++        <FieldSectionCard title="Contact">
++          <div className={FIELD_INNER_STACK}>
++            {job.contact_name && <InfoRow icon={User} label="Name">{job.contact_name}</InfoRow>}
++            {job.contact_phone && (
++              <InfoRow icon={Phone} label="Phone" href={`tel:${job.contact_phone}`}>
++                <span className="text-blue-600">{job.contact_phone}</span>
++              </InfoRow>
++            )}
++            {job.contact_email && (
++              <InfoRow icon={Mail} label="Email" href={`mailto:${job.contact_email}`}>
++                <span className="text-blue-600">{job.contact_email}</span>
++              </InfoRow>
++            )}
++          </div>
++        </FieldSectionCard>
+       )}
+ 
+-      {/* Evidence summary */}
+-      <Card title="Evidence Summary">
+-        <div className="grid grid-cols-3 gap-2 text-center">
+-          {[
+-            ['Total', evidence.length],
+-            ['Uploaded', evidence.filter(e => e.status === 'uploaded').length],
+-            ['Approved', evidence.filter(e => e.approved_for_training).length],
+-          ].map(([l, v]) => (
+-            <div key={l} className="bg-slate-50 rounded-lg p-2">
+-              <p className="text-xl font-black text-slate-900">{v}</p>
+-              <p className="text-[9px] text-slate-500 font-semibold uppercase tracking-widest">{l}</p>
+-            </div>
+-          ))}
+-        </div>
+-      </Card>
++      <div>
++        <p className={cn(FIELD_OVERLINE, 'mb-2 px-0.5')}>
++          Work timer
++        </p>
++        <p className="text-[11px] text-slate-500 mb-2 px-0.5 leading-snug">
++          Billable work time for this job (TimeEntry). Tied to job lifecycle — start after check-in / in
++          progress.
++        </p>
++        <FieldTimeTracker
++          job={job}
++          timeEntries={timeEntries}
++          executionView={executionView}
++          onRefresh={onRefresh}
++          variant="embedded"
++        />
++      </div>
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/components/fieldv2/JobStateTransitioner.jsx b/src/components/fieldv2/JobStateTransitioner.jsx
+index e77c951..6cd342c 100644
+--- a/src/components/fieldv2/JobStateTransitioner.jsx
++++ b/src/components/fieldv2/JobStateTransitioner.jsx
+@@ -21,6 +21,7 @@ import { toast } from 'sonner';
+ import { emitDispatchEventForJobStatusChange } from '@/lib/dispatchEvent';
+ import PreJobToolCheckModal from './PreJobToolCheckModal';
+ import { EtaAcknowledgementSheet } from '@/components/field/AcknowledgementSheets.jsx';
++import { BTN_SECONDARY, FIELD_CARD, FIELD_CTRL_H, FIELD_META } from '@/lib/fieldVisualTokens';
+ 
+ function RequirementItem({ requirement, blocker }) {
+   const status = blocker?.isMet ? 'met' : 'unmet';
+@@ -62,10 +63,11 @@ export default function JobStateTransitioner({
+   const qc = useQueryClient();
+ 
+   const transitionMutation = useMutation({
+-    mutationFn: async ({ toStatus, isOverride, dispatchOverrides }) => {
++    mutationFn: async ({ toStatus, isOverride, dispatchOverrides, priorStatus }) => {
+       if (!job?.id || !user) {
+         throw new Error('Missing job or user');
+       }
++      const fromStatus = priorStatus ?? job.status;
+       try {
+         await emitDispatchEventForJobStatusChange({
+           job,
+@@ -79,16 +81,35 @@ export default function JobStateTransitioner({
+         if (import.meta.env.DEV) console.error('[JobStateTransitioner] dispatch_event', e);
+         throw new Error(`Telemetry: ${msg}`);
+       }
++      const now = new Date().toISOString();
++      const timeFields = {};
++      if (toStatus === 'checked_in') {
++        timeFields.check_in_time = now;
++      }
++      if (toStatus === 'in_progress' && fromStatus !== 'paused') {
++        timeFields.work_start_time = now;
++        timeFields.check_in_time = job.check_in_time || now;
++      }
++      if (toStatus === 'pending_closeout') {
++        timeFields.work_end_time = now;
++      }
+       const payload = {
+         status: toStatus,
++        ...timeFields,
+         ...(isOverride && { override_reason: overrideReason, overridden_by: user.email }),
+       };
++      /*
++       * TECHNICAL_DEBT (target Iteration 4/5): Field v2 canonical path uses jobRepository / apiClient
++       * elsewhere; long-term, job status updates should go through the same abstraction instead of
++       * direct base44.entities.Job.update. Intentionally unchanged scope for Iteration 3.
++       */
+       return base44.entities.Job.update(job.id, payload);
+     },
+     onSuccess: (data) => {
+       if (!job?.id) return;
+       qc.invalidateQueries({ queryKey: ['fj-job', job.id] });
+       qc.invalidateQueries({ queryKey: ['fj-audit', job.id] });
++      qc.invalidateQueries({ queryKey: ['fj-time-entries', job.id] });
+       toast.success(`Job transitioned to ${STATUS_LABELS[data.status]?.label}`);
+       setPendingTransition(null);
+       setOverrideReason('');
+@@ -114,7 +135,7 @@ export default function JobStateTransitioner({
+ 
+   const handleTransition = (toStatus, isOverride = false) => {
+     if (toStatus === 'en_route' && !isOverride) {
+-      pendingEnRouteRef.current = { toStatus, isOverride };
++      pendingEnRouteRef.current = { toStatus, isOverride, priorStatus: currentStatus };
+       setEnRouteEtaOpen(true);
+       return;
+     }
+@@ -123,7 +144,7 @@ export default function JobStateTransitioner({
+       toStatus === 'in_progress' && !isOverride && currentStatus !== 'paused';
+ 
+     if (needsToolCheck) {
+-      pendingAfterToolCheckRef.current = { toStatus, isOverride };
++      pendingAfterToolCheckRef.current = { toStatus, isOverride, priorStatus: currentStatus };
+       setToolCheckOpen(true);
+       return;
+     }
+@@ -135,7 +156,7 @@ export default function JobStateTransitioner({
+       setPendingTransition({ toStatus, isOverride: true });
+       return;
+     }
+-    transitionMutation.mutate({ toStatus, isOverride });
++    transitionMutation.mutate({ toStatus, isOverride, priorStatus: currentStatus });
+   };
+ 
+   const completeToolCheckAndTransition = () => {
+@@ -158,7 +179,7 @@ export default function JobStateTransitioner({
+   };
+ 
+   return (
+-    <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
++    <div className={cn(FIELD_CARD, 'overflow-hidden')}>
+       <EtaAcknowledgementSheet
+         open={enRouteEtaOpen}
+         onOpenChange={(o) => {
+@@ -182,14 +203,14 @@ export default function JobStateTransitioner({
+         onPassed={completeToolCheckAndTransition}
+       />
+       {/* Current State */}
+-      <div className="px-4 py-3 border-b border-slate-50 bg-slate-50">
++      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
+         <div className="flex items-center gap-3">
+           <div className={cn('flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold',
+             currentLabel.color)}>
+             <span className="inline-block h-2 w-2 rounded-full bg-current opacity-60" />
+             {currentLabel.label}
+           </div>
+-          <p className="text-[10px] text-slate-500">Current job state</p>
++          <p className={FIELD_META}>Current job state</p>
+         </div>
+       </div>
+ 
+@@ -216,7 +237,7 @@ export default function JobStateTransitioner({
+                   <div className="flex-1 min-w-0">
+                     <div className="flex items-center gap-2 mb-1">
+                       <p className="text-sm font-bold text-slate-900">{label}</p>
+-                      <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded',
++                      <span className={cn('text-[10px] font-bold tracking-wide px-1.5 py-0.5 rounded',
+                         targetLabel.color)}>
+                         → {targetLabel.label}
+                       </span>
+@@ -250,7 +271,8 @@ export default function JobStateTransitioner({
+                     onClick={() => handleTransition(to, !isAllowed && canOverride)}
+                     disabled={isDisabled || transitionMutation.isPending}
+                     className={cn(
+-                      'flex-shrink-0 h-9 px-3 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 whitespace-nowrap',
++                      'flex-shrink-0 px-3 text-xs font-bold transition-colors flex items-center gap-1 whitespace-nowrap rounded-xl',
++                      FIELD_CTRL_H,
+                       isAllowed
+                         ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
+                         : canOverride
+@@ -305,14 +327,14 @@ export default function JobStateTransitioner({
+                   setShowOverrideReason(false);
+                   setPendingTransition(null);
+                 }}
+-                className="flex-1 h-9 px-3 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200"
++                className={cn('flex-1 px-3 text-xs', BTN_SECONDARY)}
+               >
+                 Cancel
+               </button>
+               <button
+                 onClick={() => handleTransition(pendingTransition.toStatus, true)}
+                 disabled={!overrideReason.trim()}
+-                className="flex-1 h-9 px-3 rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 disabled:opacity-50"
++                className="flex-1 px-3 rounded-xl bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 disabled:opacity-50 h-10"
+               >
+                 Confirm Override
+               </button>
+diff --git a/src/components/fieldv2/OfflineEditsIndicator.jsx b/src/components/fieldv2/OfflineEditsIndicator.jsx
+index cd28cbe..30949ae 100644
+--- a/src/components/fieldv2/OfflineEditsIndicator.jsx
++++ b/src/components/fieldv2/OfflineEditsIndicator.jsx
+@@ -37,7 +37,7 @@ export default function OfflineEditsIndicator({ jobId, isOnline }) {
+ 
+   return (
+     <div className={cn(
+-      'border rounded-lg p-3 space-y-2',
++      'border rounded-xl p-3 space-y-2 shadow-sm',
+       !isOnline ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'
+     )}>
+       <div className="flex items-center gap-2">
+@@ -71,8 +71,8 @@ export default function OfflineEditsIndicator({ jobId, isOnline }) {
+         borderColor: !isOnline ? 'rgba(217, 119, 6, 0.2)' : 'rgba(37, 99, 235, 0.2)'
+       }}>
+         {queuedEdits.slice(0, 3).map(edit => (
+-          <div key={edit.id} className="flex items-center justify-between text-[10px] px-2 py-1 bg-white rounded">
+-            <span className="text-slate-600 truncate flex-1">{edit.action.toUpperCase()}: {edit.entity_type}</span>
++          <div key={edit.id} className="flex items-center justify-between px-2 py-1 bg-white rounded-lg border border-slate-100/80">
++            <span className="text-[10px] text-slate-600 truncate flex-1">{edit.action.toUpperCase()}: {edit.entity_type}</span>
+             <span className={cn(
+               'text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ml-2',
+               edit.status === 'pending' ? 'bg-amber-100 text-amber-700' :
+diff --git a/src/components/fieldv2/PreJobToolCheckModal.jsx b/src/components/fieldv2/PreJobToolCheckModal.jsx
+index c1ab69e..934fc2a 100644
+--- a/src/components/fieldv2/PreJobToolCheckModal.jsx
++++ b/src/components/fieldv2/PreJobToolCheckModal.jsx
+@@ -20,6 +20,8 @@ import {
+   allScopeAcknowledgementsTrue,
+   emptyScopeAcknowledgementState,
+ } from '@/constants/scopeAcknowledgements';
++import { FIELD_CARD, FIELD_OVERLINE, FIELD_SURFACE_MUTED } from '@/lib/fieldVisualTokens';
++import { cn } from '@/lib/utils';
+ 
+ const ITEMS = [
+   { key: 'ppe', label: 'PPE appropriate for this site / task is available and in use' },
+@@ -104,8 +106,8 @@ export default function PreJobToolCheckModal({ open, onOpenChange, job, user, on
+           </DialogDescription>
+         </DialogHeader>
+ 
+-        <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 space-y-2">
+-          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
++        <div className={cn(FIELD_SURFACE_MUTED, 'p-3 space-y-2')}>
++          <div className={cn('flex items-center gap-1.5', FIELD_OVERLINE)}>
+             <Shield className="h-3 w-3" /> Job: {job?.title || job?.external_id || job?.id}
+           </div>
+           {ITEMS.map((item) => (
+@@ -124,8 +126,8 @@ export default function PreJobToolCheckModal({ open, onOpenChange, job, user, on
+           ))}
+         </div>
+ 
+-        <div className="rounded-xl border border-slate-100 bg-white p-3 space-y-2">
+-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Scope &amp; docs (Iteration 11)</p>
++        <div className={cn(FIELD_CARD, 'p-3 space-y-2')}>
++          <p className={FIELD_OVERLINE}>Scope &amp; docs (Iteration 11)</p>
+           <p className="text-[10px] text-slate-500 leading-snug">
+             Same signals as pre-arrival <code className="text-[9px]">arrival_event</code> flags — recorded on this{' '}
+             <code className="text-[9px]">tool_check_event</code> when you start from overview/state machine.
+diff --git a/src/components/fieldv2/RunbookSteps.jsx b/src/components/fieldv2/RunbookSteps.jsx
+index f1ac12a..d27b4ad 100644
+--- a/src/components/fieldv2/RunbookSteps.jsx
++++ b/src/components/fieldv2/RunbookSteps.jsx
+@@ -12,6 +12,11 @@ import { toast } from 'sonner';
+ import EvidenceCaptureModal from './EvidenceCaptureModal';
+ import { useAuth } from '@/lib/AuthContext';
+ import { emitRunbookStepEvent } from '@/lib/runbookStepEvent';
++import {
++  FIELD_CARD,
++  FIELD_CTRL_H,
++  FIELD_OVERLINE,
++} from '@/lib/fieldVisualTokens';
+ 
+ // ── Timer hook ─────────────────────────────────────────────────────────
+ function useStepTimer(running) {
+@@ -136,7 +141,7 @@ function RunbookStep({ step, job, jobId, runbookPhaseMeta, evidence, adapters, o
+ 
+   return (
+     <>
+-    <div className={cn('bg-white rounded-xl border transition-all', status === 'failed' ? 'border-red-200' : status === 'complete' ? 'border-emerald-200' : 'border-slate-100')}>
++    <div className={cn(FIELD_CARD, 'transition-all', status === 'failed' ? 'border-red-200' : status === 'complete' ? 'border-emerald-200' : '')}>
+       {/* Header row */}
+       <button onClick={() => setOpen(o => !o)}
+         className="w-full flex items-center gap-3 px-4 py-3.5 text-left">
+@@ -159,10 +164,10 @@ function RunbookStep({ step, job, jobId, runbookPhaseMeta, evidence, adapters, o
+ 
+       {/* Expanded content */}
+       {open && (
+-        <div className="px-4 pb-4 space-y-3 border-t border-slate-50">
++        <div className="px-4 pb-4 space-y-3 border-t border-slate-100">
+           {/* Notes */}
+           <div className="pt-2">
+-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Notes</label>
++            <label className={cn(FIELD_OVERLINE, 'mb-1 block')}>Notes</label>
+             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
+               placeholder="Add step notes…"
+               className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-slate-400" />
+@@ -172,25 +177,25 @@ function RunbookStep({ step, job, jobId, runbookPhaseMeta, evidence, adapters, o
+           <div className="flex flex-wrap gap-2">
+             {status === 'idle' && (
+               <button onClick={handleStart}
+-                className="flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-blue-600 text-white text-xs font-bold hover:bg-blue-700">
++                className={cn('flex items-center gap-1.5 px-3 bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 rounded-xl', FIELD_CTRL_H)}>
+                 <Play className="h-3.5 w-3.5" /> Start
+               </button>
+             )}
+             {status === 'in_progress' && (
+               <>
+                 <button onClick={handleComplete}
+-                  className="flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700">
++                  className={cn('flex items-center gap-1.5 px-3 bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 rounded-xl', FIELD_CTRL_H)}>
+                   <CheckCircle2 className="h-3.5 w-3.5" /> Complete
+                 </button>
+                 <button onClick={handleFail}
+-                  className="flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-red-600 text-white text-xs font-bold hover:bg-red-700">
++                  className={cn('flex items-center gap-1.5 px-3 bg-red-600 text-white text-xs font-bold hover:bg-red-700 rounded-xl', FIELD_CTRL_H)}>
+                   <XCircle className="h-3.5 w-3.5" /> Fail
+                 </button>
+               </>
+             )}
+             {status !== 'idle' && (
+               <button onClick={() => setShowCapture(true)}
+-                className="flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-slate-900 text-white text-xs font-bold hover:bg-slate-700">
++                className={cn('flex items-center gap-1.5 px-3 bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 rounded-xl', FIELD_CTRL_H)}>
+                 <Paperclip className="h-3.5 w-3.5" /> Attach Evidence
+               </button>
+             )}
+@@ -199,7 +204,7 @@ function RunbookStep({ step, job, jobId, runbookPhaseMeta, evidence, adapters, o
+           {/* Linked evidence */}
+           {stepEvidence.length > 0 && (
+             <div>
+-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Linked Evidence</p>
++              <p className={cn(FIELD_OVERLINE, 'mb-1.5')}>Linked Evidence</p>
+               <div className="flex gap-2 flex-wrap">
+                 {stepEvidence.map(e => <EvidenceThumbnail key={e.id} ev={e} />)}
+               </div>
+@@ -212,6 +217,7 @@ function RunbookStep({ step, job, jobId, runbookPhaseMeta, evidence, adapters, o
+     {showCapture && (
+       <EvidenceCaptureModal
+         jobId={jobId}
++        job={job}
+         stepId={step.id}
+         adapter={adapters?.upload}
+         onClose={() => setShowCapture(false)}
+@@ -240,9 +246,9 @@ export default function RunbookSteps({ job, evidence, adapters, onRefresh }) {
+   return (
+     <div className="space-y-3">
+       {/* Progress */}
+-      <div className="bg-white rounded-xl border border-slate-100 px-4 py-3">
++      <div className={cn(FIELD_CARD, 'px-4 py-3')}>
+         <div className="flex items-center justify-between mb-1.5">
+-          <p className="text-xs font-black text-slate-500">{runbook?.title || 'Runbook'} v{runbook?.version}</p>
++          <p className="text-xs font-semibold text-slate-600">{runbook?.title || 'Runbook'} v{runbook?.version}</p>
+           <span className="text-[11px] text-slate-400 tabular-nums">{completedCount}/{steps.length} steps</span>
+         </div>
+         <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">
+diff --git a/src/components/fieldv2/UploadProgressIndicator.jsx b/src/components/fieldv2/UploadProgressIndicator.jsx
+index 12efcc3..02484b5 100644
+--- a/src/components/fieldv2/UploadProgressIndicator.jsx
++++ b/src/components/fieldv2/UploadProgressIndicator.jsx
+@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react'
+ import { AlertCircle, CheckCircle2, Pause, Trash2, Upload } from 'lucide-react'
+ import { uploadQueue } from '@/lib/uploadQueue'
+ import { cn } from '@/lib/utils'
++import { FIELD_BODY, FIELD_META } from '@/lib/fieldVisualTokens'
+ 
+ export default function UploadProgressIndicator({ jobId, isOnline }) {
+   const [uploads, setUploads] = useState([])
+@@ -39,7 +40,7 @@ export default function UploadProgressIndicator({ jobId, isOnline }) {
+   const inProgressCount = uploads.filter(u => u.status === 'uploading').length
+ 
+   return (
+-    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
++    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2 shadow-sm">
+       <div className="flex items-center gap-2">
+         <Upload className="h-4 w-4 text-blue-600" />
+         <p className="text-sm font-semibold text-blue-900">Pending Uploads</p>
+@@ -56,7 +57,7 @@ export default function UploadProgressIndicator({ jobId, isOnline }) {
+       {/* Upload list */}
+       <div className="space-y-2 border-t border-blue-200 pt-2">
+         {uploads.map(upload => (
+-          <div key={upload.id} className="bg-white rounded-lg p-2 space-y-1.5">
++          <div key={upload.id} className="bg-white rounded-xl border border-slate-100/90 p-2 space-y-1.5 shadow-sm">
+             {/* Title + status */}
+             <div className="flex items-center gap-2">
+               {upload.status === 'uploading' && <div className="h-3 w-3 rounded-full bg-blue-500 animate-pulse" />}
+@@ -79,7 +80,7 @@ export default function UploadProgressIndicator({ jobId, isOnline }) {
+                   style={{ width: `${getProgress(upload)}%` }}
+                 />
+               </div>
+-              <div className="flex items-center justify-between text-[10px] text-slate-500">
++              <div className={cn('flex items-center justify-between', FIELD_META)}>
+                 <span>
+                   {getProgress(upload)}% · {formatFileSize(upload.uploadedBytes)} / {formatFileSize(upload.metadata.fileSize)}
+                 </span>
+@@ -92,7 +93,7 @@ export default function UploadProgressIndicator({ jobId, isOnline }) {
+             </div>
+ 
+             {/* Metadata */}
+-            <div className="text-[10px] text-slate-400 space-y-0.5">
++            <div className={cn(FIELD_BODY, 'text-slate-400 space-y-0.5')}>
+               <div>
+                 Technician: <span className="text-slate-600 font-mono">{upload.metadata.technician.email}</span>
+               </div>
+@@ -110,14 +111,14 @@ export default function UploadProgressIndicator({ jobId, isOnline }) {
+                 {upload.status === 'uploading' && (
+                   <button
+                     onClick={() => handlePause(upload.id)}
+-                    className="flex-1 h-6 px-2 rounded-sm bg-amber-100 text-amber-700 text-[10px] font-bold hover:bg-amber-200 transition-colors flex items-center justify-center gap-1"
++                    className="flex-1 h-7 px-2 rounded-lg bg-amber-100 text-amber-700 text-[10px] font-bold hover:bg-amber-200 transition-colors flex items-center justify-center gap-1"
+                   >
+                     <Pause className="h-3 w-3" /> Pause
+                   </button>
+                 )}
+                 <button
+                   onClick={() => handleCancel(upload.id)}
+-                  className="flex-1 h-6 px-2 rounded-sm bg-red-100 text-red-700 text-[10px] font-bold hover:bg-red-200 transition-colors flex items-center justify-center gap-1"
++                  className="flex-1 h-7 px-2 rounded-lg bg-red-100 text-red-700 text-[10px] font-bold hover:bg-red-200 transition-colors flex items-center justify-center gap-1"
+                 >
+                   <Trash2 className="h-3 w-3" /> Cancel
+                 </button>
+diff --git a/src/pages/FieldJobDetail.jsx b/src/pages/FieldJobDetail.jsx
+index a088067..c57043f 100644
+--- a/src/pages/FieldJobDetail.jsx
++++ b/src/pages/FieldJobDetail.jsx
+@@ -1,10 +1,9 @@
+ /**
+- * FieldJobDetail — Job execution cockpit (B)
+- * Tabs: Overview | Runbook | Evidence | TimeLog | Meetings | Audit
+- * Full-screen (no bottom nav shell).
++ * FieldJobDetail — Single workflow surface: Overview | Runbook | Evidence | Closeout | Comms.
++ * Legacy ?tab= values: timelog→overview, meetings→comms, audit→closeout.
+  */
+-import React, { useState } from 'react';
+-import { Link } from 'react-router-dom';
++import React, { useState, useMemo, useEffect } from 'react';
++import { Link, useSearchParams } from 'react-router-dom';
+ import { useQuery, useQueryClient } from '@tanstack/react-query';
+ import { ArrowLeft, Loader2 } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+@@ -16,40 +15,70 @@ import {
+   emitJobContextFieldIfChanged,
+ } from '@/lib/jobContextField';
+ import { getTechnicianIdForCanonicalEvents } from '@/lib/technicianId';
++import { getNextStepMessage } from '@/components/fieldv2/jobExecutionNextStep';
++import {
++  buildFieldJobExecutionView,
++  deriveTimerSessionFromTimeEntries,
++  formatWorkedDuration,
++} from '@/lib/fieldJobExecutionModel';
++import {
++  FIELD_MAX_WIDTH,
++  FIELD_META,
++  FIELD_PAGE_PAD_X,
++  FIELD_PAGE_PAD_Y,
++  FIELD_STACK_GAP,
++  FIELD_TAB_ACTIVE,
++  FIELD_TAB_INACTIVE,
++  FIELD_TAB_LABEL,
++} from '@/lib/fieldVisualTokens';
+ 
+-import JobOverview      from '@/components/fieldv2/JobOverview';
+-import RunbookSteps     from '@/components/fieldv2/RunbookSteps';
++import JobOverview from '@/components/fieldv2/JobOverview';
++import RunbookSteps from '@/components/fieldv2/RunbookSteps';
+ import EvidenceGalleryView from '@/components/fieldv2/EvidenceGalleryView';
+-import FieldTimeTracker from '@/components/fieldv2/FieldTimeTracker';
+-import MeetingsTab      from '@/components/fieldv2/MeetingsTab';
+-import AuditTab         from '@/components/fieldv2/AuditTab';
++import JobCloseoutSection from '@/components/fieldv2/JobCloseoutSection';
++import JobCommsSection from '@/components/fieldv2/JobCommsSection';
+ import OfflineEditsIndicator from '@/components/fieldv2/OfflineEditsIndicator.jsx';
+ import UploadProgressIndicator from '@/components/fieldv2/UploadProgressIndicator';
+ 
+-const TABS = [
+-  { id: 'overview',  label: 'Overview'  },
+-  { id: 'runbook',   label: 'Runbook'   },
+-  { id: 'evidence',  label: 'Evidence'  },
+-  { id: 'timelog',   label: 'TimeLog'   },
+-  { id: 'meetings',  label: 'Meetings'  },
+-  { id: 'audit',     label: 'Audit'     },
++const LEGACY_TAB_ALIASES = {
++  timelog: 'overview',
++  meetings: 'comms',
++  audit: 'closeout',
++};
++
++const SECTIONS = [
++  { id: 'overview', label: 'Overview' },
++  { id: 'runbook', label: 'Runbook' },
++  { id: 'evidence', label: 'Evidence' },
++  { id: 'closeout', label: 'Closeout' },
++  { id: 'comms', label: 'Comms' },
+ ];
+ 
+-const STATUS_DOT = {
+-  in_progress: 'bg-blue-500',  paused: 'bg-amber-400',
+-  checked_in:  'bg-purple-500', en_route: 'bg-cyan-500',
+-};
++const VALID_SECTIONS = new Set(SECTIONS.map((s) => s.id));
++
++function normalizeSection(tab) {
++  if (!tab || typeof tab !== 'string') return 'overview';
++  const t = tab.toLowerCase();
++  const mapped = LEGACY_TAB_ALIASES[t] ?? t;
++  return VALID_SECTIONS.has(mapped) ? mapped : 'overview';
++}
+ 
+ export default function FieldJobDetail() {
+-  const urlParams = new URLSearchParams(window.location.search);
+-  const jobId     = urlParams.get('id');
+-  const initTab   = urlParams.get('tab') || 'overview';
+-  const [tab, setTab] = useState(initTab);
++  const [searchParams, setSearchParams] = useSearchParams();
++  const jobId = searchParams.get('id');
++  const section = normalizeSection(searchParams.get('tab'));
+   const [isOnline, setIsOnline] = useState(navigator.onLine);
++  const [headerTick, setHeaderTick] = useState(0);
+   const qc = useQueryClient();
+   const { user } = useAuth();
+ 
+-  // Track online/offline status
++  const setSection = (id) => {
++    const next = new URLSearchParams(searchParams);
++    next.set('tab', id);
++    if (jobId) next.set('id', jobId);
++    setSearchParams(next, { replace: true });
++  };
++
+   React.useEffect(() => {
+     const handleOnline = () => setIsOnline(true);
+     const handleOffline = () => setIsOnline(false);
+@@ -61,14 +90,37 @@ export default function FieldJobDetail() {
+     };
+   }, []);
+ 
+-  /* ── Data queries ────────────────────────────────────────────────── */
+-  const { data: job, isLoading } = useQuery({
++  const { data: job, isLoading, isError, error } = useQuery({
+     queryKey: ['fj-job', jobId],
+-    queryFn:  () => jobId ? jobRepository.getJob(jobId) : Promise.resolve(null),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? jobRepository.getJob(jobId) : Promise.resolve(null)),
++    enabled: !!jobId,
+     staleTime: 30_000,
+   });
+ 
++  const { data: timeEntries = [] } = useQuery({
++    queryKey: ['fj-time-entries', jobId],
++    queryFn: () => (jobId ? apiClient.getTimeEntries(jobId) : Promise.resolve([])),
++    enabled: !!jobId,
++    staleTime: 15_000,
++  });
++
++  const workSegmentOpen = useMemo(
++    () => deriveTimerSessionFromTimeEntries(timeEntries).workSegmentOpen,
++    [timeEntries]
++  );
++
++  useEffect(() => {
++    if (!workSegmentOpen) return;
++    const id = setInterval(() => setHeaderTick((t) => t + 1), 1000);
++    return () => clearInterval(id);
++  }, [workSegmentOpen]);
++
++  const executionView = useMemo(() => {
++    void headerTick;
++    if (!job) return null;
++    return buildFieldJobExecutionView(job, timeEntries);
++  }, [job, timeEntries, headerTick]);
++
+   const techKey = getTechnicianIdForCanonicalEvents(user);
+   const contextDedupeKey = job ? buildCanonicalJobContextString(job, techKey) : '';
+ 
+@@ -88,107 +140,207 @@ export default function FieldJobDetail() {
+     return () => {
+       cancelled = true;
+     };
+-  }, [job?.id, contextDedupeKey, techKey, user]);
++  }, [job, contextDedupeKey, techKey, user]);
+ 
+   const { data: evidence = [] } = useQuery({
+     queryKey: ['fj-evidence', jobId],
+-    queryFn:  () => jobId ? apiClient.getEvidence(jobId) : Promise.resolve([]),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? apiClient.getEvidence(jobId) : Promise.resolve([])),
++    enabled: !!jobId,
+   });
+ 
+   const { data: labels = [] } = useQuery({
+     queryKey: ['fj-labels', jobId],
+-    queryFn:  () => jobId ? apiClient.getLabels(jobId) : Promise.resolve([]),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? apiClient.getLabels(jobId) : Promise.resolve([])),
++    enabled: !!jobId,
+   });
+ 
+   const { data: meetings = [] } = useQuery({
+     queryKey: ['fj-meetings', jobId],
+-    queryFn:  () => jobId ? apiClient.getMeetings(jobId) : Promise.resolve([]),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? apiClient.getMeetings(jobId) : Promise.resolve([])),
++    enabled: !!jobId,
+   });
+ 
+   const { data: activities = [] } = useQuery({
+     queryKey: ['fj-activities', jobId],
+-    queryFn:  () => [],
+-    enabled:  false,
++    queryFn: () => [],
++    enabled: false,
+   });
+ 
+   const { data: auditLogs = [] } = useQuery({
+     queryKey: ['fj-audit', jobId],
+-    queryFn:  () => [],
+-    enabled:  false,
++    queryFn: () => [],
++    enabled: false,
+   });
+ 
+   const invalidateAll = () => {
+-    ['fj-job','fj-evidence','fj-labels','fj-meetings','fj-activities','fj-audit']
+-      .forEach(k => qc.invalidateQueries({ queryKey: [k, jobId] }));
++    [
++      'fj-job',
++      'fj-evidence',
++      'fj-labels',
++      'fj-meetings',
++      'fj-activities',
++      'fj-audit',
++      'fj-time-entries',
++    ].forEach((k) => qc.invalidateQueries({ queryKey: [k, jobId] }));
+   };
+ 
+-  /* ── Guards ──────────────────────────────────────────────────────── */
+-  if (!jobId) return <div className="p-10 text-center text-slate-400 text-sm">No job ID in URL</div>;
+-  if (isLoading) return (
+-    <div className="min-h-screen flex items-center justify-center">
+-      <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+-    </div>
+-  );
+-  if (!job) return <div className="p-10 text-center text-slate-400 text-sm">Job not found</div>;
++  if (!jobId) {
++    return <div className="p-10 text-center text-slate-400 text-sm">No job ID in URL</div>;
++  }
++  if (isLoading) {
++    return (
++      <div className="min-h-screen flex items-center justify-center">
++        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
++      </div>
++    );
++  }
++  if (isError) {
++    return (
++      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
++        <p className="text-sm font-semibold text-slate-800">Couldn&apos;t load this job</p>
++        <p className="text-xs text-slate-500 mt-2 max-w-sm">
++          {error instanceof Error ? error.message : 'Check your connection and try again.'}
++        </p>
++        <Link
++          to="/FieldJobs"
++          className="mt-6 text-sm font-bold text-slate-900 underline underline-offset-2"
++        >
++          Back to jobs
++        </Link>
++      </div>
++    );
++  }
++  if (!job || !executionView) {
++    return (
++      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
++        <p className="text-sm font-semibold text-slate-800">Job not found</p>
++        <p className="text-xs text-slate-500 mt-2">It may have been removed or you may not have access.</p>
++        <Link
++          to="/FieldJobs"
++          className="mt-6 text-sm font-bold text-slate-900 underline underline-offset-2"
++        >
++          Back to jobs
++        </Link>
++      </div>
++    );
++  }
++
++  const tabProps = {
++    job,
++    evidence,
++    labels,
++    meetings,
++    activities,
++    auditLogs,
++    onRefresh: invalidateAll,
++  };
+ 
+-  const tabProps = { job, evidence, labels, meetings, activities, auditLogs, onRefresh: invalidateAll };
+-  const activeDot = STATUS_DOT[job.status];
++  const nextStep = getNextStepMessage(job, evidence);
++  const runbookComplete =
++    job.runbook_phases?.every((phase) => phase.steps?.every((step) => step.completed)) ?? false;
++  const hasSignature = !!job.signoff_signature_url;
+ 
+-  // Pass full job data to tabs (not just evidence)
+-  const tabPropsWithJob = { ...tabProps };
++  const headerWorked = formatWorkedDuration(executionView.timer.workedSeconds);
+ 
+   return (
+     <div className="min-h-screen bg-slate-50 flex flex-col">
+-
+-      {/* ── Sticky header ──────────────────────────────────────────── */}
+-      <div className="sticky top-0 z-30 bg-white border-b border-slate-100 shadow-sm">
+-        <div className="max-w-2xl mx-auto px-4 pt-3 pb-0">
+-
++      <div className="sticky top-0 z-30 bg-white border-b border-slate-200/80 shadow-sm">
++        <div className={cn(FIELD_MAX_WIDTH, 'mx-auto', FIELD_PAGE_PAD_X, 'pt-3 pb-3')}>
+           <div className="flex items-center gap-3 mb-2">
+-            <Link to="/FieldJobs"
+-              className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center flex-shrink-0 transition-colors">
++            <Link
++              to="/FieldJobs"
++              className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center flex-shrink-0 transition-colors"
++            >
+               <ArrowLeft className="h-4 w-4 text-slate-600" />
+             </Link>
+             <div className="flex-1 min-w-0">
+               <div className="flex items-center gap-2">
+-                {activeDot && <span className={cn('h-2 w-2 rounded-full flex-shrink-0 motion-safe:animate-pulse', activeDot)} />}
+-                <h1 className="text-sm font-black text-slate-900 truncate">{job.title}</h1>
++                <span
++                  className={cn(
++                    'h-2 w-2 rounded-full flex-shrink-0 motion-safe:animate-pulse',
++                    executionView.lifecycle.dotClass
++                  )}
++                />
++                <h1 className="text-sm font-bold text-slate-900 truncate">{job.title}</h1>
+               </div>
+-              <p className="text-[10px] text-slate-400 truncate">{job.external_id} · {job.project_name}</p>
++              <p className={cn(FIELD_META, 'truncate')}>
++                {job.external_id} · {job.project_name}
++              </p>
++              <p className="text-xs text-slate-600 mt-1 leading-snug">
++                <span className="font-bold">{executionView.lifecycle.label}</span>
++                <span className="text-slate-300 mx-1.5" aria-hidden>
++                  ·
++                </span>
++                <span>{executionView.timer.workSegmentOpen ? 'Timer on' : 'Timer off'}</span>
++                <span className="text-slate-300 mx-1.5" aria-hidden>
++                  ·
++                </span>
++                <span className="font-mono tabular-nums text-slate-500">{headerWorked}</span>
++              </p>
++              {nextStep && (
++                <p className="text-[11px] text-slate-600 mt-1.5 leading-snug line-clamp-2">
++                  {nextStep}
++                </p>
++              )}
+             </div>
+           </div>
+ 
+-          {/* Tab strip */}
+-          <div className="flex overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+-            {TABS.map(t => (
+-              <button key={t.id} onClick={() => setTab(t.id)}
++          <div
++            className="flex rounded-xl bg-slate-100 p-1 gap-0.5 overflow-x-auto"
++            style={{ scrollbarWidth: 'none' }}
++            role="tablist"
++            aria-label="Job sections"
++          >
++            {SECTIONS.map((s) => (
++              <button
++                key={s.id}
++                type="button"
++                role="tab"
++                aria-selected={section === s.id}
++                onClick={() => setSection(s.id)}
+                 className={cn(
+-                  'flex-shrink-0 py-2.5 px-3.5 text-[11px] font-bold border-b-2 transition-all',
+-                  tab === t.id ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'
+-                )}>
+-                {t.label}
++                  'flex-1 min-w-[4.25rem] py-2 px-1.5 rounded-lg transition-all whitespace-nowrap',
++                  FIELD_TAB_LABEL,
++                  section === s.id ? FIELD_TAB_ACTIVE : FIELD_TAB_INACTIVE
++                )}
++              >
++                {s.label}
+               </button>
+             ))}
+           </div>
+         </div>
+       </div>
+ 
+-      {/* ── Tab content ────────────────────────────────────────────── */}
+-      <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-4 pb-10 space-y-4">
++      <div
++        className={cn(
++          'flex-1 w-full mx-auto pb-10',
++          FIELD_MAX_WIDTH,
++          FIELD_PAGE_PAD_X,
++          FIELD_PAGE_PAD_Y,
++          FIELD_STACK_GAP
++        )}
++      >
+         <OfflineEditsIndicator jobId={jobId} isOnline={isOnline} />
+         <UploadProgressIndicator jobId={jobId} isOnline={isOnline} />
+         <div>
+-          {tab === 'overview'  && <JobOverview       {...tabPropsWithJob} />}
+-          {tab === 'runbook'   && <RunbookSteps       {...tabPropsWithJob} />}
+-          {tab === 'evidence'  && <EvidenceGalleryView {...tabPropsWithJob} />}
+-          {tab === 'timelog'   && <FieldTimeTracker    {...tabPropsWithJob} />}
+-          {tab === 'meetings'  && <MeetingsTab         {...tabPropsWithJob} />}
+-          {tab === 'audit'     && <AuditTab            {...tabPropsWithJob} />}
++          {section === 'overview' && (
++            <JobOverview
++              {...tabProps}
++              timeEntries={timeEntries}
++              executionView={executionView}
++              onNavigateToSection={setSection}
++              runbookComplete={runbookComplete}
++              hasSignature={hasSignature}
++            />
++          )}
++          {section === 'runbook' && <RunbookSteps {...tabProps} />}
++          {section === 'evidence' && <EvidenceGalleryView {...tabProps} />}
++          {section === 'closeout' && (
++            <JobCloseoutSection job={job} auditLogs={auditLogs} onRefresh={invalidateAll} />
++          )}
++          {section === 'comms' && <JobCommsSection {...tabProps} />}
+         </div>
+       </div>
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/pages/FieldJobs.jsx b/src/pages/FieldJobs.jsx
+index 86dd001..6145b53 100644
+--- a/src/pages/FieldJobs.jsx
++++ b/src/pages/FieldJobs.jsx
+@@ -5,38 +5,32 @@
+ import React, { useState } from 'react';
+ import { Link } from 'react-router-dom';
+ import { useQuery } from '@tanstack/react-query';
+-import { Search, Loader2, ChevronRight, WifiOff } from 'lucide-react';
++import { Search, Loader2, ChevronRight, AlertCircle, Briefcase, Calendar, User } from 'lucide-react';
+ import { Input } from '@/components/ui/input';
+ import { cn } from '@/lib/utils';
+ import { format, parseISO } from 'date-fns';
+ import { apiClient } from '@/api/client';
++import { getFieldJobStatusDisplay, FIELD_JOB_STATUS_DISPLAY } from '@/lib/fieldJobExecutionModel';
++import {
++  FIELD_CARD,
++  FIELD_MAX_WIDTH,
++  FIELD_PAGE_PAD_X,
++  FIELD_PAGE_PAD_Y,
++} from '@/lib/fieldVisualTokens';
+ 
+-const STATUS_CFG = {
+-  assigned:         { label: 'Assigned',    bg: 'bg-slate-100',   text: 'text-slate-600',   dot: 'bg-slate-400'   },
+-  en_route:         { label: 'En Route',    bg: 'bg-cyan-50',     text: 'text-cyan-700',    dot: 'bg-cyan-500'    },
+-  checked_in:       { label: 'Checked In',  bg: 'bg-purple-50',   text: 'text-purple-700',  dot: 'bg-purple-500'  },
+-  in_progress:      { label: 'In Progress', bg: 'bg-blue-50',     text: 'text-blue-700',    dot: 'bg-blue-500'    },
+-  paused:           { label: 'Paused',      bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-400'   },
+-  pending_closeout: { label: 'Closeout',    bg: 'bg-orange-50',   text: 'text-orange-700',  dot: 'bg-orange-400'  },
+-  submitted:        { label: 'Submitted',   bg: 'bg-green-50',    text: 'text-green-700',   dot: 'bg-green-500'   },
+-  approved:         { label: 'Approved',    bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500' },
+-  rejected:         { label: 'Rejected',    bg: 'bg-red-50',      text: 'text-red-700',     dot: 'bg-red-500'     },
+-  qc_required:      { label: 'QC Required', bg: 'bg-yellow-50',   text: 'text-yellow-700',  dot: 'bg-yellow-500'  },
+-  closed:           { label: 'Closed',      bg: 'bg-slate-50',    text: 'text-slate-400',   dot: 'bg-slate-300'   },
+-};
+ const PRIO_CFG = {
+-  urgent: { label: '🔴 Urgent', cls: 'text-red-600' },
+-  high:   { label: '🟠 High',   cls: 'text-orange-500' },
+-  medium: { label: '🔵 Med',    cls: 'text-blue-500' },
+-  low:    { label: '⚪ Low',    cls: 'text-slate-400' },
++  urgent: { label: 'Urgent', dot: 'bg-red-500', text: 'text-red-700 font-semibold' },
++  high: { label: 'High', dot: 'bg-orange-500', text: 'text-slate-800 font-medium' },
++  medium: { label: 'Medium', dot: 'bg-slate-400', text: 'text-slate-600' },
++  low: { label: 'Low', dot: 'bg-slate-300', text: 'text-slate-500' },
+ };
+ const FILTER_CHIPS = ['all','assigned','in_progress','paused','pending_closeout','approved'];
+ 
+ function StatusBadge({ status }) {
+-  const c = STATUS_CFG[status] || STATUS_CFG.assigned;
++  const c = getFieldJobStatusDisplay(status);
+   return (
+-    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0', c.bg, c.text)}>
+-      <span className={cn('h-1.5 w-1.5 rounded-full flex-shrink-0', c.dot)} />
++    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0', c.pillBg, c.pillText)}>
++      <span className={cn('h-1.5 w-1.5 rounded-full flex-shrink-0', c.dotClass)} />
+       {c.label}
+     </span>
+   );
+@@ -69,7 +63,7 @@ function JobCard({ job }) {
+   const prio = PRIO_CFG[job.priority] || PRIO_CFG.medium;
+   return (
+     <Link to={`/FieldJobDetail?id=${job.id}`}
+-      className="flex items-center gap-3 bg-white rounded-xl border border-slate-100 px-4 py-3.5 hover:bg-slate-50 active:bg-slate-100 transition-colors"
++      className={cn('flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 active:bg-slate-100 transition-colors', FIELD_CARD)}
+     >
+       <div className="flex-1 min-w-0">
+         <div className="flex items-start gap-2 mb-1">
+@@ -78,9 +72,22 @@ function JobCard({ job }) {
+         </div>
+         <p className="text-xs text-slate-400 truncate mb-1.5">{job.project_name || job.site_name || '—'}</p>
+         <div className="flex items-center gap-3 text-[11px] flex-wrap">
+-          <span className={prio.cls}>{prio.label}</span>
+-          {job.scheduled_date && <span className="text-slate-400">📅 {fmtDate(job.scheduled_date)}</span>}
+-          {job.assigned_to && <span className="text-slate-400 truncate max-w-[100px]">👤 {job.assigned_to.split('@')[0]}</span>}
++          <span className={cn('inline-flex items-center gap-1.5', prio.text)}>
++            <span className={cn('h-1.5 w-1.5 rounded-full flex-shrink-0', prio.dot)} aria-hidden />
++            {prio.label}
++          </span>
++          {job.scheduled_date && (
++            <span className="text-slate-400 inline-flex items-center gap-1">
++              <Calendar className="h-3 w-3 flex-shrink-0 opacity-70" aria-hidden />
++              {fmtDate(job.scheduled_date)}
++            </span>
++          )}
++          {job.assigned_to && (
++            <span className="text-slate-400 truncate max-w-[100px] inline-flex items-center gap-1">
++              <User className="h-3 w-3 flex-shrink-0 opacity-70" aria-hidden />
++              {job.assigned_to.split('@')[0]}
++            </span>
++          )}
+           <ActualVsPlanned planned={job.work_start_time} actual={job.check_in_time} />
+         </div>
+       </div>
+@@ -96,7 +103,7 @@ export default function FieldJobs() {
+   const [search,   setSearch]   = useState('');
+   const [statusF,  setStatusF]  = useState('all');
+ 
+-  const { data: jobs = [], isLoading } = useQuery({
++  const { data: jobs = [], isLoading, isError, error } = useQuery({
+     queryKey: ['field-jobs'],
+     queryFn:  () => apiClient.getJobs(),
+     staleTime: 30_000,
+@@ -113,8 +120,8 @@ export default function FieldJobs() {
+   return (
+     <div className="min-h-screen bg-slate-50">
+       {/* Sticky filter bar */}
+-      <div className="sticky top-14 z-10 bg-white border-b border-slate-100">
+-        <div className="max-w-2xl mx-auto px-4 pt-3 pb-2 space-y-2">
++      <div className="sticky top-14 z-10 bg-white border-b border-slate-200/80">
++        <div className={cn(FIELD_MAX_WIDTH, 'mx-auto', FIELD_PAGE_PAD_X, 'pt-3 pb-2 space-y-2')}>
+           <div className="relative">
+             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
+             <Input value={search} onChange={e => setSearch(e.target.value)}
+@@ -127,7 +134,7 @@ export default function FieldJobs() {
+                 className={cn('flex-shrink-0 h-7 px-3 rounded-full text-[11px] font-bold transition-colors capitalize',
+                   statusF === s ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                 )}>
+-                {s === 'all' ? `All (${jobs.length})` : (STATUS_CFG[s]?.label || s)}
++                {s === 'all' ? `All (${jobs.length})` : (FIELD_JOB_STATUS_DISPLAY[s]?.label ?? s)}
+                 {s !== 'all' && (
+                   <span className="ml-1 opacity-60">{jobs.filter(j => j.status === s).length}</span>
+                 )}
+@@ -138,13 +145,28 @@ export default function FieldJobs() {
+       </div>
+ 
+       {/* List */}
+-      <div className="max-w-2xl mx-auto px-4 py-4 pb-28 space-y-2">
++      <div className={cn(FIELD_MAX_WIDTH, 'mx-auto', FIELD_PAGE_PAD_X, FIELD_PAGE_PAD_Y, 'pb-28 space-y-2.5')}>
+         {isLoading ? (
+           <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-slate-300" /></div>
++        ) : isError ? (
++          <div className="flex flex-col items-center py-20 px-6 gap-3 text-center">
++            <AlertCircle className="h-10 w-10 text-amber-500" aria-hidden />
++            <p className="text-sm font-semibold text-slate-800">Couldn&apos;t load jobs</p>
++            <p className="text-xs text-slate-500 max-w-sm">
++              {error instanceof Error ? error.message : 'Check your connection and try again.'}
++            </p>
++          </div>
++        ) : jobs.length === 0 ? (
++          <div className="flex flex-col items-center py-20 px-6 gap-3 text-center text-slate-500">
++            <Briefcase className="h-10 w-10 text-slate-300" aria-hidden />
++            <p className="text-sm font-semibold text-slate-700">No jobs assigned</p>
++            <p className="text-xs text-slate-500">When work orders are assigned to you, they will appear here.</p>
++          </div>
+         ) : filtered.length === 0 ? (
+           <div className="flex flex-col items-center py-20 gap-3 text-slate-400">
+-            <WifiOff className="h-8 w-8" />
+-            <p className="text-sm font-medium">No jobs match your filters</p>
++            <Search className="h-8 w-8 text-slate-300" aria-hidden />
++            <p className="text-sm font-medium text-slate-600">No jobs match your filters</p>
++            <p className="text-xs text-slate-400">Try another status or clear search.</p>
+           </div>
+         ) : (
+           filtered.map(job => <JobCard key={job.id} job={job} />)
+@@ -152,4 +174,4 @@ export default function FieldJobs() {
+       </div>
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/lib/fieldVisualTokens.ts b/src/lib/fieldVisualTokens.ts
+new file mode 100644
+index 0000000..c47bbff
+--- /dev/null
++++ b/src/lib/fieldVisualTokens.ts
+@@ -0,0 +1,95 @@
++/**
++ * Canonical field technician flow — shared Tailwind class tokens (Iteration 6).
++ * Keeps spacing, type scale, surfaces, and CTAs coherent without global theme rewrites.
++ */
++
++/** Max content width aligned with FieldJobDetail / FieldJobs */
++export const FIELD_MAX_WIDTH = 'max-w-2xl'
++
++/** Horizontal padding for page sections */
++export const FIELD_PAGE_PAD_X = 'px-4'
++
++/** Vertical padding for main scroll areas */
++export const FIELD_PAGE_PAD_Y = 'py-4'
++
++/** Stack gap between major sections on a job tab */
++export const FIELD_STACK_GAP = 'space-y-5'
++
++/** Stack gap inside cards */
++export const FIELD_INNER_STACK = 'space-y-3'
++
++/** Section overline (eyebrow) — single scale across field v2 */
++export const FIELD_OVERLINE =
++  'text-[10px] font-semibold text-slate-500 uppercase tracking-wider'
++
++/** Strong overline for emphasis (still enterprise, not playful) */
++export const FIELD_OVERLINE_STRONG =
++  'text-[10px] font-bold text-slate-500 uppercase tracking-wider'
++
++/** Small section title inside a card */
++export const FIELD_SECTION_TITLE = 'text-sm font-bold text-slate-900 leading-snug'
++
++/** Body copy */
++export const FIELD_BODY = 'text-xs text-slate-600 leading-relaxed'
++
++/** Metadata / secondary line */
++export const FIELD_META = 'text-xs text-slate-500'
++
++/** IDs, mono hints */
++export const FIELD_META_MONO = 'text-[11px] text-slate-500 font-mono tabular-nums'
++
++/** Default elevated card */
++export const FIELD_CARD =
++  'bg-white rounded-xl border border-slate-200/90 shadow-sm'
++
++/** Card with titled header band */
++export const FIELD_CARD_HEADER = 'px-4 py-2.5 border-b border-slate-100'
++
++/** Inner padding for card body */
++export const FIELD_CARD_BODY = 'p-4'
++
++/** Muted / secondary panel (meetings, audit, etc.) */
++export const FIELD_SURFACE_MUTED =
++  'rounded-xl border border-dashed border-slate-200/90 bg-slate-50/80'
++
++/** Warning / escalation — distinct but same radius family as cards */
++export const FIELD_SURFACE_WARNING =
++  'rounded-xl border-2 border-amber-300/90 bg-amber-50/60 shadow-sm ring-1 ring-amber-100/80'
++
++/** Primary action (filled slate) */
++export const BTN_PRIMARY =
++  'inline-flex items-center justify-center rounded-xl bg-slate-900 text-white font-semibold hover:bg-slate-800 disabled:opacity-50'
++
++/** Secondary (outline) */
++export const BTN_SECONDARY =
++  'inline-flex items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-800 font-semibold hover:bg-slate-50 disabled:opacity-50'
++
++/** Danger / destructive */
++export const BTN_DANGER =
++  'inline-flex items-center justify-center rounded-xl bg-red-600 text-white font-semibold hover:bg-red-700 disabled:opacity-50'
++
++/** Segment tabs — same scale as overlines, sentence case */
++export const FIELD_TAB_LABEL = 'text-[10px] font-semibold'
++
++/** Compact pill tab (segment control) — inactive */
++export const FIELD_TAB_INACTIVE = 'text-slate-500 hover:text-slate-700'
++
++/** Compact pill tab — active */
++export const FIELD_TAB_ACTIVE = 'bg-white text-slate-900 shadow-sm'
++
++/** Standard control height */
++export const FIELD_CTRL_H = 'h-10'
++
++/** Small badge row for sync / QC tone — neutral slate */
++export const FIELD_BADGE_NEUTRAL = 'bg-slate-100 text-slate-700 border border-slate-200/80'
++
++/** Attention without red */
++export const FIELD_BADGE_WARN = 'bg-amber-50 text-amber-900 border border-amber-200/80'
++
++/** Primary text CTA (Runbook / Evidence) */
++export const FIELD_LINK_PRIMARY =
++  'text-xs font-bold text-slate-900 underline underline-offset-2'
++
++/** Secondary text CTA */
++export const FIELD_LINK_SECONDARY =
++  'text-xs font-semibold text-slate-600 underline underline-offset-2'
+diff --git a/src/components/fieldv2/FieldSectionCard.jsx b/src/components/fieldv2/FieldSectionCard.jsx
+new file mode 100644
+index 0000000..79aa677
+--- /dev/null
++++ b/src/components/fieldv2/FieldSectionCard.jsx
+@@ -0,0 +1,49 @@
++/**
++ * Standard section card for canonical field v2 — composes fieldVisualTokens.
++ */
++import React from 'react';
++import { cn } from '@/lib/utils';
++import {
++  FIELD_BODY,
++  FIELD_CARD,
++  FIELD_CARD_BODY,
++  FIELD_CARD_HEADER,
++  FIELD_OVERLINE,
++  FIELD_SURFACE_MUTED,
++  FIELD_SURFACE_WARNING,
++} from '@/lib/fieldVisualTokens';
++
++/**
++ * @param {Object} props
++ * @param {string} [props.title] — overline + optional header band
++ * @param {string} [props.description] — support copy below title
++ * @param {'default' | 'muted' | 'warning'} [props.variant]
++ * @param {string} [props.className]
++ * @param {React.ReactNode} props.children
++ */
++export default function FieldSectionCard({ title, description, variant = 'default', className, children }) {
++  const shell =
++    variant === 'muted'
++      ? cn(FIELD_SURFACE_MUTED, 'px-4 py-4', className)
++      : variant === 'warning'
++        ? cn(FIELD_SURFACE_WARNING, 'px-4 py-4', className)
++        : cn(FIELD_CARD, 'overflow-hidden', className);
++
++  return (
++    <div className={shell}>
++      {title && variant === 'default' && (
++        <div className={FIELD_CARD_HEADER}>
++          <p className={FIELD_OVERLINE}>{title}</p>
++          {description ? <p className={cn(FIELD_BODY, 'mt-1.5')}>{description}</p> : null}
++        </div>
++      )}
++      {title && variant !== 'default' && (
++        <div className="mb-3 space-y-1">
++          <p className={FIELD_OVERLINE}>{title}</p>
++          {description ? <p className={FIELD_BODY}>{description}</p> : null}
++        </div>
++      )}
++      {variant === 'default' ? <div className={FIELD_CARD_BODY}>{children}</div> : children}
++    </div>
++  );
++}

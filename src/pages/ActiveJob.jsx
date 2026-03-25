@@ -2,7 +2,7 @@ import React from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
-import { createPageUrl } from '@/utils';
+import { fieldJobDetailUrl } from '@/utils/fieldRoutes';
 import TimeTracker from '../components/field/TimeTracker';
 import { StatusBadge } from '../components/field/StatusBadge';
 import { Loader2, Briefcase, ArrowRight, MapPin, Clock } from 'lucide-react';
@@ -50,7 +50,7 @@ export default function ActiveJob() {
                       </p>
                     )}
                   </div>
-                  <Link to={createPageUrl('JobDetail') + `?id=${job.id}`}>
+                  <Link to={fieldJobDetailUrl(job.id)}>
                     <Button size="sm" variant="ghost" className="rounded-full">
                       <ArrowRight className="h-4 w-4" />
                     </Button>
@@ -77,7 +77,7 @@ export default function ActiveJob() {
               {todayJobs.map(job => (
                 <Link
                   key={job.id}
-                  to={createPageUrl('JobDetail') + `?id=${job.id}`}
+                  to={fieldJobDetailUrl(job.id)}
                   className="flex items-center gap-3 bg-white rounded-xl border border-slate-100 p-3"
                 >
                   <div className="h-10 w-10 rounded-lg bg-blue-50 flex items-center justify-center flex-shrink-0">

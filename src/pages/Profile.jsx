@@ -166,7 +166,7 @@ export default function Profile() {
           if (!todayJob) return null;
           return (
             <Link
-              to={`/JobDetail?id=${todayJob.id}`}
+              to={`/FieldJobDetail?id=${todayJob.id}`}
               className="block bg-slate-900 rounded-2xl p-4 active:opacity-90 transition-opacity"
             >
               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Current Assignment</p>

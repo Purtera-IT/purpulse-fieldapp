@@ -5,8 +5,10 @@ import AdminDevPanel   from './pages/AdminDevPanel';
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom';
-import PageNotFound from './lib/PageNotFound';
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom';
+import LegacyJobDetailRedirect from '@/components/routing/LegacyJobDetailRedirect';
+import { CANONICAL_JOBS_PATH } from '@/utils/fieldRoutes';
+import PageNotFound from './pages/PageNotFound';
 import { AuthProvider, useAuth } from '@/lib/AuthContext';
 import UserNotRegisteredError from '@/components/UserNotRegisteredError';
 import AuthErrorBoundary from '@/components/AuthErrorBoundary';
@@ -18,13 +20,14 @@ import TelemetryConsent from '@/components/TelemetryConsent';
 // Initialize Sentry for error tracking
 initSentry();
 
-const { Pages, Layout, mainPage } = pagesConfig;
-const mainPageKey = mainPage ?? Object.keys(Pages)[0];
-const MainPage = mainPageKey ? Pages[mainPageKey] : <></>;
+const { Pages, Layout } = pagesConfig;
 
 const LayoutWrapper = ({ children, currentPageName }) => Layout ?
   <Layout currentPageName={currentPageName}>{children}</Layout>
   : <>{children}</>;
+
+/** Legacy list/chat/time — technician home is canonical jobs list */
+const LEGACY_TAB_REDIRECT = CANONICAL_JOBS_PATH;
 
 const AuthenticatedApp = () => {
   const { isLoadingAuth, isLoadingPublicSettings, authError, navigateToLogin } = useAuth();
@@ -52,11 +55,32 @@ const AuthenticatedApp = () => {
   // Render the main app
   return (
     <Routes>
-      <Route path="/" element={
-        <LayoutWrapper currentPageName={mainPageKey}>
-          <MainPage />
-        </LayoutWrapper>
-      } />
+      <Route path="/" element={<Navigate to={CANONICAL_JOBS_PATH} replace />} />
+
+      {/* Canonical technician flow */}
+      <Route
+        path="/FieldJobs"
+        element={
+          <LayoutWrapper currentPageName="FieldJobs">
+            <FieldJobs />
+          </LayoutWrapper>
+        }
+      />
+      <Route
+        path="/FieldJobDetail"
+        element={
+          <LayoutWrapper currentPageName="FieldJobDetail">
+            <FieldJobDetail />
+          </LayoutWrapper>
+        }
+      />
+
+      {/* Legacy technician routes → canonical (pages kept on disk, not in pages.config) */}
+      <Route path="/Jobs" element={<Navigate to={CANONICAL_JOBS_PATH} replace />} />
+      <Route path="/JobDetail" element={<LegacyJobDetailRedirect />} />
+      <Route path="/Chat" element={<Navigate to={LEGACY_TAB_REDIRECT} replace />} />
+      <Route path="/TimeLog" element={<Navigate to={LEGACY_TAB_REDIRECT} replace />} />
+
       {Object.entries(Pages).map(([path, Page]) => (
         <Route
           key={path}
@@ -68,9 +92,6 @@ const AuthenticatedApp = () => {
           }
         />
       ))}
-      {/* ── New Field App v2 pages (no Layout shell) ── */}
-      <Route path="/FieldJobs"      element={<FieldJobs />} />
-      <Route path="/FieldJobDetail" element={<FieldJobDetail />} />
       <Route path="/AdminDevPanel"  element={
         <LayoutWrapper currentPageName="AdminDevPanel"><AdminDevPanel /></LayoutWrapper>
       } />

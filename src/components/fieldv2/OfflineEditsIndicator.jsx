@@ -37,7 +37,7 @@ export default function OfflineEditsIndicator({ jobId, isOnline }) {
 
   return (
     <div className={cn(
-      'border rounded-lg p-3 space-y-2',
+      'border rounded-xl p-3 space-y-2 shadow-sm',
       !isOnline ? 'bg-amber-50 border-amber-200' : 'bg-blue-50 border-blue-200'
     )}>
       <div className="flex items-center gap-2">
@@ -71,8 +71,8 @@ export default function OfflineEditsIndicator({ jobId, isOnline }) {
         borderColor: !isOnline ? 'rgba(217, 119, 6, 0.2)' : 'rgba(37, 99, 235, 0.2)'
       }}>
         {queuedEdits.slice(0, 3).map(edit => (
-          <div key={edit.id} className="flex items-center justify-between text-[10px] px-2 py-1 bg-white rounded">
-            <span className="text-slate-600 truncate flex-1">{edit.action.toUpperCase()}: {edit.entity_type}</span>
+          <div key={edit.id} className="flex items-center justify-between px-2 py-1 bg-white rounded-lg border border-slate-100/80">
+            <span className="text-[10px] text-slate-600 truncate flex-1">{edit.action.toUpperCase()}: {edit.entity_type}</span>
             <span className={cn(
               'text-[9px] font-bold px-1.5 py-0.5 rounded flex-shrink-0 ml-2',
               edit.status === 'pending' ? 'bg-amber-100 text-amber-700' :

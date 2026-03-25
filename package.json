@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:iteration13": "vitest run src/tests/iteration13Qa.test.js src/tests/iteration13TelemetryQueue.test.js",
     "typecheck": "tsc -p ./jsconfig.json",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "storybook": "storybook dev -c src/.storybook",
+    "build-storybook": "storybook build -c src/.storybook -o storybook-static"
   },
   "dependencies": {
     "@base44/sdk": "^0.8.0",

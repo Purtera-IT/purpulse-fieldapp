@@ -1,6 +1,6 @@
 import React, { useRef, useState, Suspense, lazy } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '@/utils';
+import { fieldJobDetailUrl } from '@/utils/fieldRoutes';
 import { StatusBadge, PriorityIndicator, SyncBadge } from './StatusBadge';
 import { MapPin, Clock, User, ChevronRight, Play, Navigation, Phone } from 'lucide-react';
 import { format } from 'date-fns';
@@ -49,7 +49,7 @@ export default function JobCard({ job, onStartTimer, isStarting }) {
   const handleTouchEnd = (e) => {
     if (!isDragging) {
       // tap → navigate
-      navigate(createPageUrl('JobDetail') + `?id=${job.id}`);
+      navigate(fieldJobDetailUrl(job.id));
       return;
     }
     if (offsetX < -SWIPE_COMMIT) {
@@ -77,7 +77,7 @@ export default function JobCard({ job, onStartTimer, isStarting }) {
 
   const handleKeyDown = (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
-      navigate(createPageUrl('JobDetail') + `?id=${job.id}`);
+      navigate(fieldJobDetailUrl(job.id));
     } else if (e.key === 'Enter' && e.shiftKey && (canStart || isPaused)) {
       onStartTimer?.(job);
     }

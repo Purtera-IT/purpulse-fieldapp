@@ -21,6 +21,7 @@ import { toast } from 'sonner';
 import { emitDispatchEventForJobStatusChange } from '@/lib/dispatchEvent';
 import PreJobToolCheckModal from './PreJobToolCheckModal';
 import { EtaAcknowledgementSheet } from '@/components/field/AcknowledgementSheets.jsx';
+import { BTN_SECONDARY, FIELD_CARD, FIELD_CTRL_H, FIELD_META } from '@/lib/fieldVisualTokens';
 
 function RequirementItem({ requirement, blocker }) {
   const status = blocker?.isMet ? 'met' : 'unmet';
@@ -62,10 +63,11 @@ export default function JobStateTransitioner({
   const qc = useQueryClient();
 
   const transitionMutation = useMutation({
-    mutationFn: async ({ toStatus, isOverride, dispatchOverrides }) => {
+    mutationFn: async ({ toStatus, isOverride, dispatchOverrides, priorStatus }) => {
       if (!job?.id || !user) {
         throw new Error('Missing job or user');
       }
+      const fromStatus = priorStatus ?? job.status;
       try {
         await emitDispatchEventForJobStatusChange({
           job,
@@ -79,16 +81,35 @@ export default function JobStateTransitioner({
         if (import.meta.env.DEV) console.error('[JobStateTransitioner] dispatch_event', e);
         throw new Error(`Telemetry: ${msg}`);
       }
+      const now = new Date().toISOString();
+      const timeFields = {};
+      if (toStatus === 'checked_in') {
+        timeFields.check_in_time = now;
+      }
+      if (toStatus === 'in_progress' && fromStatus !== 'paused') {
+        timeFields.work_start_time = now;
+        timeFields.check_in_time = job.check_in_time || now;
+      }
+      if (toStatus === 'pending_closeout') {
+        timeFields.work_end_time = now;
+      }
       const payload = {
         status: toStatus,
+        ...timeFields,
         ...(isOverride && { override_reason: overrideReason, overridden_by: user.email }),
       };
+      /*
+       * TECHNICAL_DEBT (target Iteration 4/5): Field v2 canonical path uses jobRepository / apiClient
+       * elsewhere; long-term, job status updates should go through the same abstraction instead of
+       * direct base44.entities.Job.update. Intentionally unchanged scope for Iteration 3.
+       */
       return base44.entities.Job.update(job.id, payload);
     },
     onSuccess: (data) => {
       if (!job?.id) return;
       qc.invalidateQueries({ queryKey: ['fj-job', job.id] });
       qc.invalidateQueries({ queryKey: ['fj-audit', job.id] });
+      qc.invalidateQueries({ queryKey: ['fj-time-entries', job.id] });
       toast.success(`Job transitioned to ${STATUS_LABELS[data.status]?.label}`);
       setPendingTransition(null);
       setOverrideReason('');
@@ -114,7 +135,7 @@ export default function JobStateTransitioner({
 
   const handleTransition = (toStatus, isOverride = false) => {
     if (toStatus === 'en_route' && !isOverride) {
-      pendingEnRouteRef.current = { toStatus, isOverride };
+      pendingEnRouteRef.current = { toStatus, isOverride, priorStatus: currentStatus };
       setEnRouteEtaOpen(true);
       return;
     }
@@ -123,7 +144,7 @@ export default function JobStateTransitioner({
       toStatus === 'in_progress' && !isOverride && currentStatus !== 'paused';
 
     if (needsToolCheck) {
-      pendingAfterToolCheckRef.current = { toStatus, isOverride };
+      pendingAfterToolCheckRef.current = { toStatus, isOverride, priorStatus: currentStatus };
       setToolCheckOpen(true);
       return;
     }
@@ -135,7 +156,7 @@ export default function JobStateTransitioner({
       setPendingTransition({ toStatus, isOverride: true });
       return;
     }
-    transitionMutation.mutate({ toStatus, isOverride });
+    transitionMutation.mutate({ toStatus, isOverride, priorStatus: currentStatus });
   };
 
   const completeToolCheckAndTransition = () => {
@@ -158,7 +179,7 @@ export default function JobStateTransitioner({
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-100 overflow-hidden">
+    <div className={cn(FIELD_CARD, 'overflow-hidden')}>
       <EtaAcknowledgementSheet
         open={enRouteEtaOpen}
         onOpenChange={(o) => {
@@ -182,14 +203,14 @@ export default function JobStateTransitioner({
         onPassed={completeToolCheckAndTransition}
       />
       {/* Current State */}
-      <div className="px-4 py-3 border-b border-slate-50 bg-slate-50">
+      <div className="px-4 py-3 border-b border-slate-100 bg-slate-50/80">
         <div className="flex items-center gap-3">
           <div className={cn('flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-bold',
             currentLabel.color)}>
             <span className="inline-block h-2 w-2 rounded-full bg-current opacity-60" />
             {currentLabel.label}
           </div>
-          <p className="text-[10px] text-slate-500">Current job state</p>
+          <p className={FIELD_META}>Current job state</p>
         </div>
       </div>
 
@@ -216,7 +237,7 @@ export default function JobStateTransitioner({
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-1">
                       <p className="text-sm font-bold text-slate-900">{label}</p>
-                      <span className={cn('text-[9px] font-bold px-1.5 py-0.5 rounded',
+                      <span className={cn('text-[10px] font-bold tracking-wide px-1.5 py-0.5 rounded',
                         targetLabel.color)}>
                         → {targetLabel.label}
                       </span>
@@ -250,7 +271,8 @@ export default function JobStateTransitioner({
                     onClick={() => handleTransition(to, !isAllowed && canOverride)}
                     disabled={isDisabled || transitionMutation.isPending}
                     className={cn(
-                      'flex-shrink-0 h-9 px-3 rounded-lg text-xs font-bold transition-colors flex items-center gap-1 whitespace-nowrap',
+                      'flex-shrink-0 px-3 text-xs font-bold transition-colors flex items-center gap-1 whitespace-nowrap rounded-xl',
+                      FIELD_CTRL_H,
                       isAllowed
                         ? 'bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-50'
                         : canOverride
@@ -305,14 +327,14 @@ export default function JobStateTransitioner({
                   setShowOverrideReason(false);
                   setPendingTransition(null);
                 }}
-                className="flex-1 h-9 px-3 rounded-lg bg-slate-100 text-slate-700 text-xs font-bold hover:bg-slate-200"
+                className={cn('flex-1 px-3 text-xs', BTN_SECONDARY)}
               >
                 Cancel
               </button>
               <button
                 onClick={() => handleTransition(pendingTransition.toStatus, true)}
                 disabled={!overrideReason.trim()}
-                className="flex-1 h-9 px-3 rounded-lg bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 disabled:opacity-50"
+                className="flex-1 px-3 rounded-xl bg-amber-600 text-white text-xs font-bold hover:bg-amber-700 disabled:opacity-50 h-10"
               >
                 Confirm Override
               </button>

@@ -1,5 +1,10 @@
+/**
+ * @deprecated LEGACY — Not registered in pages.config.js. App.jsx redirects /Jobs → /FieldJobs.
+ * Kept on disk for reference until the canonical list fully replaces this implementation.
+ */
 import React, { useState, useEffect, useRef } from 'react';
 import { Link } from 'react-router-dom';
+import { fieldJobDetailUrl } from '@/utils/fieldRoutes';
 import { base44 } from '@/api/base44Client';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { parseISO, isToday, isTomorrow, isWithinInterval, startOfWeek, endOfWeek } from 'date-fns';
@@ -69,7 +74,7 @@ function JobListRow({ job }) {
 
   return (
     <Link
-      to={`/JobDetail?id=${job.id}`}
+      to={fieldJobDetailUrl(job.id)}
       className="flex items-center gap-3 bg-white rounded-xl border border-slate-100 px-4 py-3.5 active:bg-slate-50 transition-colors"
     >
       {/* Priority color stripe */}

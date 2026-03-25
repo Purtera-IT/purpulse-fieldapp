@@ -2,11 +2,13 @@
 
 Field app for technicians (Base44 project — view and edit on [Base44.com](https://Base44.com)). This repo also contains the **TechPulse data lineage package** (what to train on) and **Azure Analysis** (how to wire the app into Azure). This README explains how all three fit together.
 
-**Execution guide (UI, ingestion, Azure mapping):** [FIELD_APP_TECHPULSE_AZURE_README.md](FIELD_APP_TECHPULSE_AZURE_README.md) — screens → event families → `core.fact_*`, geospatial map UX, pipeline diagram, coverage backlog, and Field Nation boundary.
+**Documentation index:** [docs/README.md](docs/README.md) — where planning, engineering, and reference material live.
 
-**Cursor build playbook (ordered iterations + prompt template):** [CURSOR_FIELD_APP_ITERATIONS.md](CURSOR_FIELD_APP_ITERATIONS.md) — use this when splitting the execution guide into per-session implementation tasks.
+**Execution guide (UI, ingestion, Azure mapping):** [FIELD_APP_TECHPULSE_AZURE_README.md](docs/planning/FIELD_APP_TECHPULSE_AZURE_README.md) — screens → event families → `core.fact_*`, geospatial map UX, pipeline diagram, coverage backlog, and Field Nation boundary.
 
-**Telemetry ingest (Iteration 1):** [.env.example](.env.example) — `VITE_TELEMETRY_INGESTION_URL` (full POST URL), optional dev IDs. Dev panel: Profile page in dev mode. Details in [FIELD_APP_TECHPULSE_AZURE_README.md](FIELD_APP_TECHPULSE_AZURE_README.md) §6.1.
+**Cursor build playbook (ordered iterations + prompt template):** [CURSOR_FIELD_APP_ITERATIONS.md](docs/planning/CURSOR_FIELD_APP_ITERATIONS.md) — use this when splitting the execution guide into per-session implementation tasks.
+
+**Telemetry ingest (Iteration 1):** [.env.example](.env.example) — `VITE_TELEMETRY_INGESTION_URL` (full POST URL), optional dev IDs. Dev panel: Profile page in dev mode. Details in [FIELD_APP_TECHPULSE_AZURE_README.md](docs/planning/FIELD_APP_TECHPULSE_AZURE_README.md) §6.1.
 
 ---
 
@@ -177,7 +179,7 @@ The **P0 patches** in `Azure Analysis` implement steps 1–4 (envelope + dispatc
 
 ## 5. Implementation plan (what to build next)
 
-**See [IMPLEMENTATION_PLAN.md](./IMPLEMENTATION_PLAN.md)** for a step-by-step plan:
+**See [IMPLEMENTATION_PLAN.md](docs/planning/IMPLEMENTATION_PLAN.md)** for a step-by-step plan:
 
 - **Phase 1 — Foundation:** Canonical event envelope, stable `technician_id`, single telemetry queue, ingestion client.
 - **Phase 2 — Field app capture:** What to add in the UI/code for each event family (dispatch, travel/arrival, artifact, runbook, QC, closeout, escalation, feedback, tool check, job context), with file pointers.

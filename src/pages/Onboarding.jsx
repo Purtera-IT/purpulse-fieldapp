@@ -10,7 +10,7 @@
  *
  * Completion:
  *   Sets localStorage 'purpulse_onboarded' = '1'
- *   Redirects to /Jobs
+ *   Redirects to canonical field jobs list (/FieldJobs)
  *
  * Can be re-entered at any time via Support → "Re-run setup"
  * (just clear localStorage key 'purpulse_onboarded')
@@ -24,7 +24,7 @@ import React, { useState, useEffect } from 'react';
 import { base44 } from '@/api/base44Client';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
-import { createPageUrl } from '@/utils';
+import { CANONICAL_JOBS_PATH } from '@/utils/fieldRoutes';
 import { ShieldCheck, Building2, CheckCircle2, ChevronRight } from 'lucide-react';
 import DeviceRegistration from '../components/onboarding/DeviceRegistration';
 import PermissionsSetup from '../components/onboarding/PermissionsSetup';
@@ -115,7 +115,7 @@ export default function Onboarding() {
   // If already onboarded, skip to Jobs
   useEffect(() => {
     if (localStorage.getItem(ONBOARDING_KEY) === '1') {
-      navigate(createPageUrl('Jobs'), { replace: true });
+      navigate(CANONICAL_JOBS_PATH, { replace: true });
     }
   }, []);
 
@@ -125,7 +125,7 @@ export default function Onboarding() {
 
   const finish = () => {
     localStorage.setItem(ONBOARDING_KEY, '1');
-    navigate(createPageUrl('Jobs'), { replace: true });
+    navigate(CANONICAL_JOBS_PATH, { replace: true });
   };
 
   const currentStep = STEPS[step];

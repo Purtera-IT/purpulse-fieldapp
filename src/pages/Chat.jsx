@@ -1,4 +1,7 @@
 /**
+ * @deprecated LEGACY — Not registered in pages.config.js. App.jsx redirects /Chat → /FieldJobs.
+ * Kept on disk for reference; job-contextual messaging belongs under /FieldJobDetail (future IA).
+ *
  * Chat — dual-mode communication hub for Purpulse field technicians.
  *
  * Mode 1: Ask Purpulse AI  — contextual job assistant

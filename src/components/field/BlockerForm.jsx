@@ -32,10 +32,12 @@ const SEVERITY_LEVELS = [
 /**
  * @param {Object} props
  * @param {string} props.jobId
+ * @param {'comms' | undefined} [props.variant] — comms: escalation copy + toasts for FieldJobDetail Comms tab
  * @param {() => void} [props.onClose]
- * @param {(payload?: { blocker: Record<string, unknown>; blockerType: string; severityLevel: string; noteText: string }) => void | Promise<void>} [props.onSubmitted] — called after create + canonical `blocker_create` escalation enqueue attempt
+ * @param {(payload?: { blocker: Record<string, unknown>; blockerType: string; severityLevel: string; noteText: string }) => void | Promise<void>} [props.onSubmitted]
  */
-export default function BlockerForm({ jobId, onClose, onSubmitted }) {
+export default function BlockerForm({ jobId, variant, onClose, onSubmitted }) {
+  const isComms = variant === 'comms';
   const { user } = useAuth();
   const [type, setType] = useState('');
   const [severity, setSeverity] = useState('medium');
@@ -59,7 +61,11 @@ export default function BlockerForm({ jobId, onClose, onSubmitted }) {
     },
     onSuccess: async ({ blocker, blockerType, severityLevel, noteText }) => {
       queryClient.invalidateQueries({ queryKey: ['blockers', jobId] });
-      toast.success('Blocker reported');
+      if (isComms) {
+        toast.success('Escalation saved for this job.');
+      } else {
+        toast.success('Blocker reported');
+      }
       try {
         const jobCtx = await fetchJobContextForArtifactEvent(jobId);
         await emitEscalationEvent({
@@ -72,7 +78,10 @@ export default function BlockerForm({ jobId, onClose, onSubmitted }) {
           notesPreview: noteText,
         });
       } catch (err) {
-        console.warn('[escalation_event] enqueue failed after blocker create', err);
+        if (import.meta.env.DEV) {
+          console.warn('[escalation] notify path failed after save', err);
+        }
+        toast.warning('Notification sync may be delayed.');
       }
       onSubmitted?.({ blocker, blockerType, severityLevel, noteText });
       onClose?.();
@@ -85,18 +94,20 @@ export default function BlockerForm({ jobId, onClose, onSubmitted }) {
         <div className="h-8 w-8 rounded-full bg-red-50 flex items-center justify-center">
           <AlertTriangle className="h-4 w-4 text-red-600" />
         </div>
-        <h3 className="font-semibold text-slate-900">Report Blocker</h3>
+        <h3 className="font-semibold text-slate-900">{isComms ? 'Report escalation' : 'Report Blocker'}</h3>
       </div>
 
       <div className="space-y-1.5">
-        <Label className="text-xs text-slate-600">Type</Label>
+        <Label className="text-xs text-slate-600">{isComms ? 'Category' : 'Type'}</Label>
         <Select value={type} onValueChange={setType}>
           <SelectTrigger className="rounded-xl">
-            <SelectValue placeholder="Select blocker type" />
+            <SelectValue placeholder={isComms ? 'Select category' : 'Select blocker type'} />
           </SelectTrigger>
           <SelectContent>
-            {BLOCKER_TYPES.map(t => (
-              <SelectItem key={t.value} value={t.value}>{t.label}</SelectItem>
+            {BLOCKER_TYPES.map((t) => (
+              <SelectItem key={t.value} value={t.value}>
+                {t.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -109,8 +120,10 @@ export default function BlockerForm({ jobId, onClose, onSubmitted }) {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            {SEVERITY_LEVELS.map(s => (
-              <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>
+            {SEVERITY_LEVELS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -121,7 +134,7 @@ export default function BlockerForm({ jobId, onClose, onSubmitted }) {
         <Textarea
           value={note}
           onChange={(e) => setNote(e.target.value)}
-          placeholder="Describe the blocker..."
+          placeholder={isComms ? 'What needs follow-up?' : 'Describe the blocker...'}
           className="rounded-xl resize-none"
           rows={3}
         />
@@ -156,7 +169,7 @@ export default function BlockerForm({ jobId, onClose, onSubmitted }) {
           disabled={!type || !note.trim() || createBlocker.isPending}
         >
           {createBlocker.isPending ? <Loader2 className="h-4 w-4 animate-spin mr-1" /> : null}
-          Report
+          {isComms ? 'Save escalation' : 'Report'}
         </Button>
       </div>
     </div>

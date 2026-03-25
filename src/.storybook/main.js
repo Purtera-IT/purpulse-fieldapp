@@ -2,7 +2,7 @@ import { mergeConfig } from 'vite';
 import path from 'path';
 
 export default {
-  stories: ['../src/stories/**/*.stories.@(js|jsx)'],
+  stories: ['../stories/**/*.stories.@(js|jsx)'],
   addons: [
     '@storybook/addon-essentials',
     '@storybook/addon-a11y',
@@ -15,7 +15,7 @@ export default {
     return mergeConfig(config, {
       resolve: {
         alias: {
-          '@': path.resolve(__dirname, '../src'),
+          '@': path.resolve(__dirname, '..'),
         },
       },
     });

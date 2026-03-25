@@ -67,11 +67,25 @@ export const TechnicianSchema = BaseEntity.extend({
 export type Technician = z.infer<typeof TechnicianSchema>
 
 // ── Evidence / Asset ──
+// file_url: http(s) plus common non-http schemes from the field client / simulated storage.
+// TECHNICAL_DEBT (real storage slice): Revisit when backends return blob:, signed custom schemes, or other
+// URL shapes — widen this union or use a permissive string + server validation instead of enumerating schemes.
+const EvidenceFileUrlSchema = z.union([
+  z.string().url(),
+  z.string().refine(
+    (s) =>
+      typeof s === 'string' &&
+      (s.startsWith('data:') || s.startsWith('mock://') || s.startsWith('blob:')),
+    { message: 'expected data:, mock:, or blob: URL' },
+  ),
+])
+
 export const EvidenceSchema = BaseEntity.extend({
   job_id: z.string(),
   evidence_type: z.string(),
-  file_url: z.string().url(),
+  file_url: EvidenceFileUrlSchema,
   thumbnail_url: z.string().url().optional(),
+  azure_blob_url: z.string().optional(),
   content_type: z.string().optional(),
   size_bytes: z.number().optional(),
   sha256: z.string().optional(),
@@ -81,8 +95,12 @@ export const EvidenceSchema = BaseEntity.extend({
   geo_altitude_m: z.number().optional(),
   geo_accuracy_m: z.number().optional(),
   status: z.enum(['pending_upload', 'uploading', 'uploaded', 'error', 'replaced']),
+  upload_error: z.string().optional(),
   quality_score: z.number().min(0).max(100).optional(),
   quality_warning: z.string().optional(),
+  qc_status: z.string().optional(),
+  runbook_step_id: z.string().optional(),
+  exif_metadata: z.record(z.unknown()).optional(),
   notes: z.string().optional(),
   approved_for_training: z.boolean(),
 })

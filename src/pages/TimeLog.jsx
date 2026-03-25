@@ -1,4 +1,7 @@
 /**
+ * @deprecated LEGACY — Not registered in pages.config.js. App.jsx redirects /TimeLog → /FieldJobs.
+ * Kept on disk for reference; time belongs in job execution (e.g. /FieldJobDetail), not a global tab.
+ *
  * TimeLog — Time tracking page for Purpulse field technicians.
  *
  * Sections:

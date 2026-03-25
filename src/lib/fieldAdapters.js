@@ -128,11 +128,14 @@ export class Base44UploadAdapter {
    */
   async requestUploadToken(file, jobId, stepId) {
     await new Promise(r => setTimeout(r, 250)); // simulate network RTT
+    const upload_url = `mock://purpulse-blob/evidence-prod/${jobId}/${encodeURIComponent(file.name)}`;
     return {
       token:      crypto.randomUUID?.() || Math.random().toString(36).slice(2),
-      upload_url: `mock://purpulse-blob/evidence-prod/${jobId}/${encodeURIComponent(file.name)}`,
+      upload_url,
       expires_at: new Date(Date.now() + 3_600_000).toISOString(),
       storage_backend: localStorage.getItem('purpulse_storage_backend') || 'base44',
+      /** True when no real blob upload is performed (field honesty / manifest sync). */
+      is_simulated_storage: upload_url.startsWith('mock://'),
     };
   }
 

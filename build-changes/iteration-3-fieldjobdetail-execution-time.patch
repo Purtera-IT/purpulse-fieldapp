@@ -1,0 +1,1495 @@
+diff --git a/src/components/fieldv2/FieldTimeTracker.jsx b/src/components/fieldv2/FieldTimeTracker.jsx
+index 6083edb..878cc66 100644
+--- a/src/components/fieldv2/FieldTimeTracker.jsx
++++ b/src/components/fieldv2/FieldTimeTracker.jsx
+@@ -1,189 +1,182 @@
+ /**
+- * FieldTimeTracker — TimeLog tab (G)
+- * Clock-in/out, manual entry, and activity log.
+- * Persists to Activity + AuditLog.
++ * FieldTimeTracker — Work session via TimeEntry (work_start / work_stop), aligned with TimerPanel seams.
++ * Embedded in Job Overview. Session state is derived from time entries + job lifecycle, not local clock truth.
+  */
+-import React, { useState } from 'react';
++import React, { useState, useEffect, useMemo } from 'react';
+ import { useMutation, useQueryClient } from '@tanstack/react-query';
+-import { Play, Square, Plus, Clock, Loader2, Edit3 } from 'lucide-react';
++import { Play, Square, Loader2 } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+-import { format, parseISO } from 'date-fns';
+ import { toast } from 'sonner';
+-import { uuidv4 } from '@/lib/uuid';
+-import { defaultAdapters } from '@/lib/fieldAdapters';
++import { apiClient } from '@/api/client';
+ import { useAuth } from '@/lib/AuthContext';
+-import { emitArrivalForClockIn } from '@/lib/travelArrivalEvent';
++import { telemetryTimeClockStart, telemetryTimeClockStop } from '@/lib/telemetry';
++import { emitCanonicalEventsForTimeEntry } from '@/lib/travelArrivalEvent';
+ import { PreArrivalAckSheet } from '@/components/field/AcknowledgementSheets.jsx';
++import {
++  deriveTimerSessionFromTimeEntries,
++  formatWorkedDuration,
++} from '@/lib/fieldJobExecutionModel';
+ 
+-const EVENT_TYPES = ['clock_in','clock_out','start_step','end_step','upload','label','note_added'];
+-const EVENT_ICON = {
+-  clock_in:  '🟢', clock_out: '🔴', start_step: '▶️',
+-  end_step:  '✅', upload:    '📷', label:      '🏷️', note_added:'📝',
+-};
+-
+-function fmtTs(ts) { try { return format(parseISO(ts), 'MMM d HH:mm:ss'); } catch { return ts || '—'; } }
+-
+-function ActivityRow({ a }) {
+-  return (
+-    <div className="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0">
+-      <span className="text-base mt-0.5 flex-shrink-0">{EVENT_ICON[a.event_type] || '⚡'}</span>
+-      <div className="flex-1 min-w-0">
+-        <p className="text-xs font-bold text-slate-800 capitalize">{a.event_type?.replace(/_/g,' ')}</p>
+-        <p className="text-[10px] text-slate-400 truncate">{a.user_id}</p>
+-        {a.meta?.note && <p className="text-[11px] text-slate-500 mt-0.5 italic">"{a.meta.note}"</p>}
+-      </div>
+-      <span className="text-[10px] text-slate-400 font-mono flex-shrink-0">{fmtTs(a.timestamp)}</span>
+-    </div>
+-  );
++function makeClientId() {
++  return `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+ }
+ 
+-export default function FieldTimeTracker({ job, activities, adapters, onRefresh }) {
+-  const adapter = adapters?.activity || defaultAdapters.activity;
++export default function FieldTimeTracker({
++  job,
++  timeEntries = [],
++  executionView,
++  onRefresh,
++  variant = 'default',
++}) {
+   const { user } = useAuth();
+-  const [clocked,   setClockedIn]  = useState(() => activities.some(a => a.event_type === 'clock_in'));
+-  const [showManual,setShowManual] = useState(false);
+   const [arrivalAckOpen, setArrivalAckOpen] = useState(false);
+-  const [manualType,setManualType] = useState('note_added');
+-  const [manualNote,setManualNote] = useState('');
+-  const [manualTs,  setManualTs]   = useState('');
++  const [tick, setTick] = useState(0);
+   const qc = useQueryClient();
+ 
+-  const log = useMutation({
+-    mutationFn: data => adapter.logActivity(data, 'admin@purpulse.com'),
+-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['fj-activities', job.id] }); onRefresh?.(); },
++  useEffect(() => {
++    if (!executionView?.timer?.workSegmentOpen) return;
++    const id = setInterval(() => setTick((t) => t + 1), 1000);
++    return () => clearInterval(id);
++  }, [executionView?.timer?.workSegmentOpen]);
++
++  const liveTimer = useMemo(() => {
++    void tick;
++    return deriveTimerSessionFromTimeEntries(timeEntries);
++  }, [timeEntries, tick]);
++
++  const createEntry = useMutation({
++    mutationFn: async ({ entryType, timestamp }) =>
++      apiClient.createTimeEntry(job.id, {
++        job_id: job.id,
++        entry_type: entryType,
++        timestamp,
++        source: 'app',
++        sync_status: 'pending',
++        locked: false,
++        client_request_id: makeClientId(),
++      }),
++    onSuccess: (_, { entryType }) => {
++      qc.invalidateQueries({ queryKey: ['fj-time-entries', job.id] });
++      onRefresh?.();
++      if (entryType === 'work_start') toast.success('Work timer started');
++      if (entryType === 'work_stop') toast.success('Work timer stopped');
++    },
++    onError: (e) => {
++      toast.error(e instanceof Error ? e.message : 'Could not save time entry');
++    },
+   });
+ 
+-  const performClockIn = async (arrivalScopeAcknowledgements) => {
++  const performWorkStart = async (arrivalScopeAcknowledgements) => {
+     const ts = new Date().toISOString();
+     try {
+-      await emitArrivalForClockIn({ job, user, timestamp: ts, arrivalScopeAcknowledgements });
++      await emitCanonicalEventsForTimeEntry({
++        job,
++        user,
++        entryType: 'work_start',
++        timestamp: ts,
++        travelMinutes: null,
++        location: null,
++        etaAckTimestamp: null,
++        arrivalScopeAcknowledgements: arrivalScopeAcknowledgements ?? null,
++      });
+     } catch (e) {
+-      toast.error(e instanceof Error ? e.message : 'Could not queue arrival telemetry');
++      toast.error(e instanceof Error ? e.message : 'Could not queue arrival/work telemetry');
+       return;
+     }
+-    log.mutate({
+-      id:              uuidv4(),
+-      event_type:      'clock_in',
+-      user_id:         'admin@purpulse.com',
+-      work_order_id:   job.id,
+-      timestamp:       ts,
+-      meta:            { device_id: 'device-web', app_version: '2.4.1' },
+-    });
+-    setClockedIn(true);
+-    toast.success('Clocked in');
+-  };
+-
+-  const handleClockOut = () => {
+-    log.mutate({
+-      id:              uuidv4(),
+-      event_type:      'clock_out',
+-      user_id:         'admin@purpulse.com',
+-      work_order_id:   job.id,
+-      timestamp:       new Date().toISOString(),
+-      meta:            { device_id: 'device-web', app_version: '2.4.1' },
+-    });
+-    setClockedIn(false);
+-    toast.success('Clocked out');
++    telemetryTimeClockStart(job.id, 'work_start');
++    createEntry.mutate({ entryType: 'work_start', timestamp: ts });
++    setArrivalAckOpen(false);
+   };
+ 
+-  const handleManualSubmit = () => {
+-    if (!manualTs && !manualNote) { toast.error('Add a timestamp or note'); return; }
+-    log.mutate({
+-      id:            uuidv4(),
+-      event_type:    manualType,
+-      user_id:       'admin@purpulse.com',
+-      work_order_id: job.id,
+-      timestamp:     manualTs ? new Date(manualTs).toISOString() : new Date().toISOString(),
+-      meta:          { note: manualNote || undefined },
+-      session_id:    'manual-' + uuidv4().slice(0,8),
+-    });
+-    setManualNote(''); setManualTs(''); setShowManual(false);
+-    toast.success('Activity logged');
++  const performWorkStop = () => {
++    const ts = new Date().toISOString();
++    telemetryTimeClockStop(job.id, 'work_stop', liveTimer.workedSeconds);
++    createEntry.mutate({ entryType: 'work_stop', timestamp: ts });
+   };
+ 
+-  const sorted = [...activities].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
++  const embedded = variant === 'embedded';
++  const { canClockIn, canClockOut, clockInDisabledReason } = executionView;
++  const workedLabel = formatWorkedDuration(liveTimer.workedSeconds);
+ 
+   return (
+-    <div className="space-y-4">
++    <div className={embedded ? 'space-y-3' : 'space-y-4'}>
+       <PreArrivalAckSheet
+         open={arrivalAckOpen}
+         onOpenChange={setArrivalAckOpen}
+         jobLabel={job?.title}
+         onConfirm={(ackState) => {
+-          void performClockIn(ackState);
++          void performWorkStart(ackState);
+         }}
+       />
+ 
+-      {/* Clock in/out */}
+-      <div className="bg-white rounded-xl border border-slate-100 p-4">
+-        <div className="flex items-center justify-between mb-3">
+-          <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Session Control</p>
+-          <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', clocked ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500')}>
+-            {clocked ? '● Clocked In' : '○ Off Clock'}
++      <div className={cn('bg-white rounded-xl border border-slate-100', embedded ? 'p-3' : 'p-4')}>
++        <div className={cn('flex items-center justify-between gap-2', embedded ? 'mb-2' : 'mb-3')}>
++          <p
++            className={cn(
++              'font-black text-slate-500 uppercase tracking-widest',
++              embedded ? 'text-[9px]' : 'text-xs'
++            )}
++          >
++            {embedded ? 'Work timer' : 'Work timer'}
++          </p>
++          <span
++            className={cn(
++              'text-[10px] font-bold px-2 py-0.5 rounded-full tabular-nums',
++              liveTimer.workSegmentOpen
++                ? 'bg-emerald-50 text-emerald-700'
++                : 'bg-slate-100 text-slate-500'
++            )}
++          >
++            {liveTimer.workSegmentOpen ? '● Running' : '○ Stopped'}
+           </span>
+         </div>
++        <p
++          className={cn(
++            'font-mono font-bold text-slate-800 tabular-nums mb-2',
++            embedded ? 'text-sm' : 'text-base'
++          )}
++        >
++          {workedLabel}
++          <span className="text-[10px] font-sans font-semibold text-slate-400 ml-2 normal-case">
++            on this job
++          </span>
++        </p>
++        <p className="text-[10px] text-slate-500 leading-snug mb-3">{executionView.sessionSummaryLine}</p>
+         <div className="flex gap-2">
+-          <button onClick={() => setArrivalAckOpen(true)} disabled={clocked || log.isPending}
+-            className="flex-1 h-11 rounded-[8px] bg-emerald-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-emerald-700 transition-colors">
+-            <Play className="h-4 w-4" /> Clock In
++          <button
++            type="button"
++            onClick={() => setArrivalAckOpen(true)}
++            disabled={!canClockIn || createEntry.isPending}
++            title={!canClockIn ? clockInDisabledReason || undefined : undefined}
++            className={cn(
++              'flex-1 rounded-[8px] bg-emerald-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-emerald-700 transition-colors',
++              embedded ? 'h-9 text-xs' : 'h-11 text-sm'
++            )}
++          >
++            <Play className={embedded ? 'h-3.5 w-3.5' : 'h-4 w-4'} /> Start timer
+           </button>
+-          <button onClick={handleClockOut} disabled={!clocked || log.isPending}
+-            className="flex-1 h-11 rounded-[8px] bg-red-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-red-700 transition-colors">
+-            <Square className="h-4 w-4" /> Clock Out
++          <button
++            type="button"
++            onClick={performWorkStop}
++            disabled={!canClockOut || createEntry.isPending}
++            className={cn(
++              'flex-1 rounded-[8px] bg-red-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-red-700 transition-colors',
++              embedded ? 'h-9 text-xs' : 'h-11 text-sm'
++            )}
++          >
++            {createEntry.isPending ? (
++              <Loader2 className="h-3.5 w-3.5 animate-spin" />
++            ) : (
++              <>
++                <Square className={embedded ? 'h-3.5 w-3.5' : 'h-4 w-4'} /> Stop timer
++              </>
++            )}
+           </button>
+         </div>
+-      </div>
+-
+-      {/* Manual entry */}
+-      <div className="bg-white rounded-xl border border-slate-100">
+-        <button onClick={() => setShowManual(s => !s)}
+-          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-slate-50 transition-colors rounded-xl">
+-          <Edit3 className="h-4 w-4 text-slate-400" />
+-          <p className="text-sm font-bold text-slate-700 flex-1">Manual Entry</p>
+-          <Plus className={cn('h-4 w-4 text-slate-400 transition-transform', showManual && 'rotate-45')} />
+-        </button>
+-        {showManual && (
+-          <div className="px-4 pb-4 space-y-3 border-t border-slate-50">
+-            <div className="pt-2 grid grid-cols-2 gap-3">
+-              <div>
+-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Event Type</label>
+-                <select value={manualType} onChange={e => setManualType(e.target.value)}
+-                  className="w-full h-9 rounded-lg border border-slate-200 text-xs font-semibold px-3 focus:outline-none focus:ring-1 focus:ring-slate-400 capitalize bg-white">
+-                  {EVENT_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g,' ')}</option>)}
+-                </select>
+-              </div>
+-              <div>
+-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Timestamp</label>
+-                <input type="datetime-local" value={manualTs} onChange={e => setManualTs(e.target.value)}
+-                  className="w-full h-9 rounded-lg border border-slate-200 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-slate-400" />
+-              </div>
+-            </div>
+-            <div>
+-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Note</label>
+-              <input value={manualNote} onChange={e => setManualNote(e.target.value)}
+-                placeholder="Optional note…"
+-                className="w-full h-9 rounded-lg border border-slate-200 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-slate-400" />
+-            </div>
+-            <button onClick={handleManualSubmit} disabled={log.isPending}
+-              className="w-full h-10 rounded-lg bg-slate-900 text-white text-xs font-bold flex items-center justify-center gap-2 hover:bg-slate-700 disabled:opacity-50">
+-              {log.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Plus className="h-3.5 w-3.5" /> Log Activity</>}
+-            </button>
+-          </div>
++        {!canClockIn && clockInDisabledReason && (
++          <p className="text-[10px] text-slate-500 mt-2 leading-snug">{clockInDisabledReason}</p>
+         )}
+       </div>
+-
+-      {/* Activity log */}
+-      <div className="bg-white rounded-xl border border-slate-100">
+-        <div className="px-4 py-2.5 border-b border-slate-50 flex items-center gap-2">
+-          <Clock className="h-3.5 w-3.5 text-slate-400" />
+-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Activity Log ({sorted.length})</p>
+-        </div>
+-        <div className="px-4 py-2 max-h-72 overflow-y-auto">
+-          {sorted.length === 0 ? (
+-            <p className="text-center text-slate-400 text-xs py-6">No activities yet.</p>
+-          ) : sorted.map(a => <ActivityRow key={a.id} a={a} />)}
+-        </div>
+-      </div>
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/components/fieldv2/JobOverview.jsx b/src/components/fieldv2/JobOverview.jsx
+index b78bdc4..3ac4a6d 100644
+--- a/src/components/fieldv2/JobOverview.jsx
++++ b/src/components/fieldv2/JobOverview.jsx
+@@ -1,35 +1,16 @@
+ /**
+- * JobOverview — Overview tab (B)
+- * Shows job metadata, status, SOW, assigned techs.
+- * Action buttons: Start Job, Complete Job, Snapshot SOW.
++ * JobOverview — Job context, lifecycle transitions (authoritative), work timer, site/contact.
+  */
+-import React, { useState } from 'react';
+-import { useMutation, useQueryClient } from '@tanstack/react-query';
+-import { base44 } from '@/api/base44Client';
+-import { useAuth } from '@/lib/AuthContext';
++import React from 'react';
+ import {
+   MapPin, Phone, Mail, User, Clock, Building2,
+-  Play, CheckCircle, AlertTriangle, FileText,
+-  Lock,
++  AlertTriangle, FileText,
+ } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+ import { format, parseISO } from 'date-fns';
+-import { toast } from 'sonner';
++import FieldTimeTracker from './FieldTimeTracker';
+ import JobStateTransitioner from './JobStateTransitioner';
+-import PreJobToolCheckModal from './PreJobToolCheckModal';
+-import { emitDispatchEventForJobStatusChange } from '@/lib/dispatchEvent';
+-
+-const STATUS_CFG = {
+-  assigned:         { label: 'Assigned',    bg: 'bg-slate-100',  text: 'text-slate-600'  },
+-  en_route:         { label: 'En Route',    bg: 'bg-cyan-50',    text: 'text-cyan-700'   },
+-  checked_in:       { label: 'Checked In',  bg: 'bg-purple-50',  text: 'text-purple-700' },
+-  in_progress:      { label: 'In Progress', bg: 'bg-blue-50',    text: 'text-blue-700'   },
+-  paused:           { label: 'Paused',      bg: 'bg-amber-50',   text: 'text-amber-700'  },
+-  pending_closeout: { label: 'Closeout',    bg: 'bg-orange-50',  text: 'text-orange-700' },
+-  submitted:        { label: 'Submitted',   bg: 'bg-green-50',   text: 'text-green-700'  },
+-  approved:         { label: 'Approved',    bg: 'bg-emerald-50', text: 'text-emerald-700'},
+-  rejected:         { label: 'Rejected',    bg: 'bg-red-50',     text: 'text-red-700'    },
+-};
++import { LIFECYCLE_DISPLAY } from '@/lib/fieldJobExecutionModel';
+ 
+ function InfoRow({ icon: Icon, label, children, href }) {
+   const inner = (
+@@ -50,139 +31,98 @@ function InfoRow({ icon: Icon, label, children, href }) {
+ function Card({ title, children }) {
+   return (
+     <div className="bg-white rounded-xl border border-slate-100">
+-      {title && <div className="px-4 py-2.5 border-b border-slate-50"><p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{title}</p></div>}
++      {title && (
++        <div className="px-4 py-2.5 border-b border-slate-50">
++          <p className="text-[9px] font-black text-slate-400 uppercase tracking-widest">{title}</p>
++        </div>
++      )}
+       <div className="p-4 space-y-3">{children}</div>
+     </div>
+   );
+ }
+ 
+-function fmtTs(ts) { try { return format(parseISO(ts), 'MMM d, yyyy HH:mm'); } catch { return ts || '—'; } }
+-
+-export default function JobOverview({ job, evidence, labels, onRefresh }) {
+-  const [snapshotting, setSnapshotting] = useState(false);
+-  const [toolCheckOpen, setToolCheckOpen] = useState(false);
+-  const { permissions, user } = useAuth();
+-  const qc = useQueryClient();
+-
+-  // Determine if runbook is complete
+-  const runbookComplete = job?.runbook_phases?.every(phase =>
+-    phase.steps?.every(step => step.completed)
+-  ) ?? false;
+-
+-  // Check if signature is present
+-  const hasSignature = !!job?.signoff_signature_url;
+-
+-  const updateMutation = useMutation({
+-    mutationFn: async ({ status }) => {
+-      await emitDispatchEventForJobStatusChange({
+-        job,
+-        targetAppStatus: status,
+-        user,
+-      });
+-      const now = new Date().toISOString();
+-      const extra = status === 'in_progress' ? { work_start_time: now, check_in_time: now } :
+-                    status === 'pending_closeout' ? { work_end_time: now } : {};
+-      return base44.entities.Job.update(job.id, { status, ...extra });
+-    },
+-    onSuccess: (_, { status }) => {
+-      qc.invalidateQueries({ queryKey: ['fj-job', job.id] });
+-      onRefresh?.();
+-      toast.success(`Job marked as ${status.replace(/_/g, ' ')}`);
+-    },
+-    onError: (e) => {
+-      toast.error(e instanceof Error ? e.message : 'Could not update job');
+-    },
+-  });
+-
+-  const handleStatusChange = (status) => {
+-    updateMutation.mutate({ status });
+-  };
+-
+-  const handleStartJobAfterToolCheck = () => {
+-    handleStatusChange('in_progress');
+-  };
+-
+-  const handleSnapshotSOW = async () => {
+-    setSnapshotting(true);
+-    await new Promise(r => setTimeout(r, 600));
+-    setSnapshotting(false);
+-    toast.success('SOW snapshot created (mock) — version pinned to current runbook.');
+-  };
++function fmtTs(ts) {
++  try {
++    return format(parseISO(ts), 'MMM d, yyyy HH:mm');
++  } catch {
++    return ts || '—';
++  }
++}
+ 
+-  const stat = STATUS_CFG[job.status] || STATUS_CFG.assigned;
+-  const canStart    = ['assigned', 'en_route', 'checked_in', 'paused'].includes(job.status);
+-  const canComplete = ['in_progress', 'checked_in'].includes(job.status);
++export default function JobOverview({
++  job,
++  timeEntries = [],
++  executionView,
++  evidence,
++  onRefresh,
++  onNavigateToSection,
++  runbookComplete,
++  hasSignature,
++}) {
++  const stat = LIFECYCLE_DISPLAY[job.status] || LIFECYCLE_DISPLAY.assigned;
+ 
+   return (
+-    <div className="space-y-3">
+-      <PreJobToolCheckModal
+-        open={toolCheckOpen}
+-        onOpenChange={setToolCheckOpen}
+-        job={job}
+-        user={user}
+-        onPassed={handleStartJobAfterToolCheck}
+-      />
+-
+-      {/* Status + actions */}
++    <div className="space-y-4">
+       <Card>
+         <div className="flex items-center justify-between">
+-          <span className={cn('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold', stat.bg, stat.text)}>
++          <span
++            className={cn(
++              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-bold',
++              stat.pillBg,
++              stat.pillText
++            )}
++          >
+             {stat.label}
+           </span>
+           <span className="text-[10px] text-slate-400 font-mono">{job.sync_status}</span>
+         </div>
+-        {job.description && <p className="text-xs text-slate-600 leading-relaxed">{job.description}</p>}
+-        <div className="flex flex-wrap gap-2 pt-1">
+-          {canStart && permissions?.canCompleteJob && (
++        {job.description && (
++          <p className="text-xs text-slate-600 leading-relaxed">{job.description}</p>
++        )}
++        {(job.status === 'in_progress' || job.status === 'checked_in') && onNavigateToSection && (
++          <div className="pt-3 border-t border-slate-50 flex flex-wrap gap-x-4 gap-y-2">
+             <button
+-              onClick={() => {
+-                if (job.status === 'paused') handleStatusChange('in_progress');
+-                else setToolCheckOpen(true);
+-              }}
+-              disabled={updateMutation.isPending}
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 disabled:opacity-50 transition-colors"
++              type="button"
++              onClick={() => onNavigateToSection('runbook')}
++              className="text-xs font-bold text-slate-900 underline underline-offset-2"
+             >
+-              <Play className="h-3.5 w-3.5" /> Start Job
+-            </button>
+-          )}
+-          {canStart && !permissions?.canCompleteJob && (
+-            <button disabled title="Permission required"
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed">
+-              <Lock className="h-3.5 w-3.5" /> Start Job
++              Open Runbook
+             </button>
+-          )}
+-          {canComplete && permissions?.canCompleteJob && (
+-            <button onClick={() => handleStatusChange('pending_closeout')} disabled={updateMutation.isPending}
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 disabled:opacity-50 transition-colors">
+-              <CheckCircle className="h-3.5 w-3.5" /> Complete Job
+-            </button>
+-          )}
+-          {canComplete && !permissions?.canCompleteJob && (
+-            <button disabled title="Permission required"
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-slate-100 text-slate-400 text-xs font-bold cursor-not-allowed">
+-              <Lock className="h-3.5 w-3.5" /> Complete Job
++            <button
++              type="button"
++              onClick={() => onNavigateToSection('evidence')}
++              className="text-xs font-bold text-slate-900 underline underline-offset-2"
++            >
++              Open Evidence
+             </button>
+-          )}
+-          {permissions?.canEditJob && (
+-            <button onClick={handleSnapshotSOW} disabled={snapshotting}
+-              className="flex items-center gap-1.5 h-9 px-4 rounded-[8px] bg-slate-900 text-white text-xs font-bold hover:bg-slate-700 disabled:opacity-50 transition-colors">
+-              <FileText className="h-3.5 w-3.5" />
+-              {snapshotting ? 'Snapshotting…' : 'Snapshot SOW'}
++            <button
++              type="button"
++              onClick={() => onNavigateToSection('closeout')}
++              className="text-xs font-bold text-slate-900 underline underline-offset-2"
++            >
++              Closeout
+             </button>
+-          )}
+-        </div>
++          </div>
++        )}
+       </Card>
+ 
+-      {/* State Machine */}
+-      <JobStateTransitioner
+-        job={job}
+-        evidence={evidence}
+-        runbookComplete={runbookComplete}
+-        hasSignature={hasSignature}
+-        onTransitionSuccess={onRefresh}
+-      />
++      <div>
++        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-0.5">
++          Job state
++        </p>
++        <p className="text-[11px] text-slate-500 mb-2 px-0.5 leading-snug">
++          Advance dispatch lifecycle here (en route, check-in, start work, pause, complete). One place
++          for all transitions — same rules as before.
++        </p>
++        <JobStateTransitioner
++          job={job}
++          evidence={evidence}
++          runbookComplete={runbookComplete}
++          hasSignature={hasSignature}
++          onTransitionSuccess={onRefresh}
++        />
++      </div>
+ 
+-      {/* Hazards */}
+       {job.hazards && (
+         <div className="bg-red-50 border border-red-200 rounded-xl p-4">
+           <div className="flex items-center gap-2 mb-1.5">
+@@ -193,57 +133,77 @@ export default function JobOverview({ job, evidence, labels, onRefresh }) {
+         </div>
+       )}
+ 
+-      {/* Work order details */}
+       <Card title="Work Order">
+-        {job.external_id   && <InfoRow icon={FileText}   label="WO Number">{job.external_id}</InfoRow>}
+-        {job.project_name  && <InfoRow icon={Building2}  label="Project">{job.project_name}</InfoRow>}
+-        {job.assigned_to   && <InfoRow icon={User}       label="Assigned To">{job.assigned_to}</InfoRow>}
++        {job.external_id && <InfoRow icon={FileText} label="WO Number">{job.external_id}</InfoRow>}
++        {job.project_name && <InfoRow icon={Building2} label="Project">{job.project_name}</InfoRow>}
++        {job.assigned_to && <InfoRow icon={User} label="Assigned To">{job.assigned_to}</InfoRow>}
+         {job.scheduled_date && (
+-          <InfoRow icon={Clock} label="Scheduled">{fmtTs(`${job.scheduled_date}T${job.scheduled_time || '00:00'}:00`)}</InfoRow>
++          <InfoRow icon={Clock} label="Scheduled">
++            {fmtTs(`${job.scheduled_date}T${job.scheduled_time || '00:00'}:00`)}
++          </InfoRow>
++        )}
++        {job.work_start_time && (
++          <InfoRow icon={Clock} label="Actual Start">
++            {fmtTs(job.work_start_time)}
++          </InfoRow>
++        )}
++        {job.work_end_time && (
++          <InfoRow icon={Clock} label="Actual End">
++            {fmtTs(job.work_end_time)}
++          </InfoRow>
+         )}
+-        {job.work_start_time && <InfoRow icon={Clock} label="Actual Start">{fmtTs(job.work_start_time)}</InfoRow>}
+-        {job.work_end_time   && <InfoRow icon={Clock} label="Actual End">{fmtTs(job.work_end_time)}</InfoRow>}
+       </Card>
+ 
+-      {/* Site */}
+       {(job.site_name || job.site_address) && (
+         <Card title="Site">
+-          {job.site_name    && <InfoRow icon={Building2} label="Site">{job.site_name}</InfoRow>}
++          {job.site_name && <InfoRow icon={Building2} label="Site">{job.site_name}</InfoRow>}
+           {job.site_address && (
+             <InfoRow icon={MapPin} label="Address">
+-              <a href={`https://maps.google.com/?q=${encodeURIComponent(job.site_address)}`} target="_blank" rel="noopener noreferrer"
+-                className="text-blue-600">{job.site_address}</a>
++              <a
++                href={`https://maps.google.com/?q=${encodeURIComponent(job.site_address)}`}
++                target="_blank"
++                rel="noopener noreferrer"
++                className="text-blue-600"
++              >
++                {job.site_address}
++              </a>
+             </InfoRow>
+           )}
+         </Card>
+       )}
+ 
+-      {/* Contact */}
+       {(job.contact_name || job.contact_phone) && (
+         <Card title="Contact">
+-          {job.contact_name  && <InfoRow icon={User}  label="Name">{job.contact_name}</InfoRow>}
+-          {job.contact_phone && <InfoRow icon={Phone} label="Phone" href={`tel:${job.contact_phone}`}>
+-            <span className="text-blue-600">{job.contact_phone}</span></InfoRow>}
+-          {job.contact_email && <InfoRow icon={Mail}  label="Email" href={`mailto:${job.contact_email}`}>
+-            <span className="text-blue-600">{job.contact_email}</span></InfoRow>}
++          {job.contact_name && <InfoRow icon={User} label="Name">{job.contact_name}</InfoRow>}
++          {job.contact_phone && (
++            <InfoRow icon={Phone} label="Phone" href={`tel:${job.contact_phone}`}>
++              <span className="text-blue-600">{job.contact_phone}</span>
++            </InfoRow>
++          )}
++          {job.contact_email && (
++            <InfoRow icon={Mail} label="Email" href={`mailto:${job.contact_email}`}>
++              <span className="text-blue-600">{job.contact_email}</span>
++            </InfoRow>
++          )}
+         </Card>
+       )}
+ 
+-      {/* Evidence summary */}
+-      <Card title="Evidence Summary">
+-        <div className="grid grid-cols-3 gap-2 text-center">
+-          {[
+-            ['Total', evidence.length],
+-            ['Uploaded', evidence.filter(e => e.status === 'uploaded').length],
+-            ['Approved', evidence.filter(e => e.approved_for_training).length],
+-          ].map(([l, v]) => (
+-            <div key={l} className="bg-slate-50 rounded-lg p-2">
+-              <p className="text-xl font-black text-slate-900">{v}</p>
+-              <p className="text-[9px] text-slate-500 font-semibold uppercase tracking-widest">{l}</p>
+-            </div>
+-          ))}
+-        </div>
+-      </Card>
++      <div>
++        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 px-0.5">
++          Work timer
++        </p>
++        <p className="text-[11px] text-slate-500 mb-2 px-0.5 leading-snug">
++          Billable work time for this job (TimeEntry). Tied to job lifecycle — start after check-in / in
++          progress.
++        </p>
++        <FieldTimeTracker
++          job={job}
++          timeEntries={timeEntries}
++          executionView={executionView}
++          onRefresh={onRefresh}
++          variant="embedded"
++        />
++      </div>
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/components/fieldv2/JobStateTransitioner.jsx b/src/components/fieldv2/JobStateTransitioner.jsx
+index e77c951..ad2dbb0 100644
+--- a/src/components/fieldv2/JobStateTransitioner.jsx
++++ b/src/components/fieldv2/JobStateTransitioner.jsx
+@@ -62,10 +62,11 @@ export default function JobStateTransitioner({
+   const qc = useQueryClient();
+ 
+   const transitionMutation = useMutation({
+-    mutationFn: async ({ toStatus, isOverride, dispatchOverrides }) => {
++    mutationFn: async ({ toStatus, isOverride, dispatchOverrides, priorStatus }) => {
+       if (!job?.id || !user) {
+         throw new Error('Missing job or user');
+       }
++      const fromStatus = priorStatus ?? job.status;
+       try {
+         await emitDispatchEventForJobStatusChange({
+           job,
+@@ -79,8 +80,21 @@ export default function JobStateTransitioner({
+         if (import.meta.env.DEV) console.error('[JobStateTransitioner] dispatch_event', e);
+         throw new Error(`Telemetry: ${msg}`);
+       }
++      const now = new Date().toISOString();
++      const timeFields = {};
++      if (toStatus === 'checked_in') {
++        timeFields.check_in_time = now;
++      }
++      if (toStatus === 'in_progress' && fromStatus !== 'paused') {
++        timeFields.work_start_time = now;
++        timeFields.check_in_time = job.check_in_time || now;
++      }
++      if (toStatus === 'pending_closeout') {
++        timeFields.work_end_time = now;
++      }
+       const payload = {
+         status: toStatus,
++        ...timeFields,
+         ...(isOverride && { override_reason: overrideReason, overridden_by: user.email }),
+       };
+       return base44.entities.Job.update(job.id, payload);
+@@ -89,6 +103,7 @@ export default function JobStateTransitioner({
+       if (!job?.id) return;
+       qc.invalidateQueries({ queryKey: ['fj-job', job.id] });
+       qc.invalidateQueries({ queryKey: ['fj-audit', job.id] });
++      qc.invalidateQueries({ queryKey: ['fj-time-entries', job.id] });
+       toast.success(`Job transitioned to ${STATUS_LABELS[data.status]?.label}`);
+       setPendingTransition(null);
+       setOverrideReason('');
+@@ -114,7 +129,7 @@ export default function JobStateTransitioner({
+ 
+   const handleTransition = (toStatus, isOverride = false) => {
+     if (toStatus === 'en_route' && !isOverride) {
+-      pendingEnRouteRef.current = { toStatus, isOverride };
++      pendingEnRouteRef.current = { toStatus, isOverride, priorStatus: currentStatus };
+       setEnRouteEtaOpen(true);
+       return;
+     }
+@@ -123,7 +138,7 @@ export default function JobStateTransitioner({
+       toStatus === 'in_progress' && !isOverride && currentStatus !== 'paused';
+ 
+     if (needsToolCheck) {
+-      pendingAfterToolCheckRef.current = { toStatus, isOverride };
++      pendingAfterToolCheckRef.current = { toStatus, isOverride, priorStatus: currentStatus };
+       setToolCheckOpen(true);
+       return;
+     }
+@@ -135,7 +150,7 @@ export default function JobStateTransitioner({
+       setPendingTransition({ toStatus, isOverride: true });
+       return;
+     }
+-    transitionMutation.mutate({ toStatus, isOverride });
++    transitionMutation.mutate({ toStatus, isOverride, priorStatus: currentStatus });
+   };
+ 
+   const completeToolCheckAndTransition = () => {
+diff --git a/src/pages/FieldJobDetail.jsx b/src/pages/FieldJobDetail.jsx
+index a088067..d9f9c4c 100644
+--- a/src/pages/FieldJobDetail.jsx
++++ b/src/pages/FieldJobDetail.jsx
+@@ -1,10 +1,9 @@
+ /**
+- * FieldJobDetail — Job execution cockpit (B)
+- * Tabs: Overview | Runbook | Evidence | TimeLog | Meetings | Audit
+- * Full-screen (no bottom nav shell).
++ * FieldJobDetail — Single workflow surface: Overview | Runbook | Evidence | Closeout | Comms.
++ * Legacy ?tab= values: timelog→overview, meetings→comms, audit→closeout.
+  */
+-import React, { useState } from 'react';
+-import { Link } from 'react-router-dom';
++import React, { useState, useMemo, useEffect } from 'react';
++import { Link, useSearchParams } from 'react-router-dom';
+ import { useQuery, useQueryClient } from '@tanstack/react-query';
+ import { ArrowLeft, Loader2 } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+@@ -16,40 +15,60 @@ import {
+   emitJobContextFieldIfChanged,
+ } from '@/lib/jobContextField';
+ import { getTechnicianIdForCanonicalEvents } from '@/lib/technicianId';
++import { getNextStepMessage } from '@/components/fieldv2/jobExecutionNextStep';
++import {
++  buildFieldJobExecutionView,
++  deriveTimerSessionFromTimeEntries,
++  formatWorkedDuration,
++} from '@/lib/fieldJobExecutionModel';
+ 
+-import JobOverview      from '@/components/fieldv2/JobOverview';
+-import RunbookSteps     from '@/components/fieldv2/RunbookSteps';
++import JobOverview from '@/components/fieldv2/JobOverview';
++import RunbookSteps from '@/components/fieldv2/RunbookSteps';
+ import EvidenceGalleryView from '@/components/fieldv2/EvidenceGalleryView';
+-import FieldTimeTracker from '@/components/fieldv2/FieldTimeTracker';
+-import MeetingsTab      from '@/components/fieldv2/MeetingsTab';
+-import AuditTab         from '@/components/fieldv2/AuditTab';
++import JobCloseoutSection from '@/components/fieldv2/JobCloseoutSection';
++import JobCommsSection from '@/components/fieldv2/JobCommsSection';
+ import OfflineEditsIndicator from '@/components/fieldv2/OfflineEditsIndicator.jsx';
+ import UploadProgressIndicator from '@/components/fieldv2/UploadProgressIndicator';
+ 
+-const TABS = [
+-  { id: 'overview',  label: 'Overview'  },
+-  { id: 'runbook',   label: 'Runbook'   },
+-  { id: 'evidence',  label: 'Evidence'  },
+-  { id: 'timelog',   label: 'TimeLog'   },
+-  { id: 'meetings',  label: 'Meetings'  },
+-  { id: 'audit',     label: 'Audit'     },
++const LEGACY_TAB_ALIASES = {
++  timelog: 'overview',
++  meetings: 'comms',
++  audit: 'closeout',
++};
++
++const SECTIONS = [
++  { id: 'overview', label: 'Overview' },
++  { id: 'runbook', label: 'Runbook' },
++  { id: 'evidence', label: 'Evidence' },
++  { id: 'closeout', label: 'Closeout' },
++  { id: 'comms', label: 'Comms' },
+ ];
+ 
+-const STATUS_DOT = {
+-  in_progress: 'bg-blue-500',  paused: 'bg-amber-400',
+-  checked_in:  'bg-purple-500', en_route: 'bg-cyan-500',
+-};
++const VALID_SECTIONS = new Set(SECTIONS.map((s) => s.id));
++
++function normalizeSection(tab) {
++  if (!tab || typeof tab !== 'string') return 'overview';
++  const t = tab.toLowerCase();
++  const mapped = LEGACY_TAB_ALIASES[t] ?? t;
++  return VALID_SECTIONS.has(mapped) ? mapped : 'overview';
++}
+ 
+ export default function FieldJobDetail() {
+-  const urlParams = new URLSearchParams(window.location.search);
+-  const jobId     = urlParams.get('id');
+-  const initTab   = urlParams.get('tab') || 'overview';
+-  const [tab, setTab] = useState(initTab);
++  const [searchParams, setSearchParams] = useSearchParams();
++  const jobId = searchParams.get('id');
++  const section = normalizeSection(searchParams.get('tab'));
+   const [isOnline, setIsOnline] = useState(navigator.onLine);
++  const [headerTick, setHeaderTick] = useState(0);
+   const qc = useQueryClient();
+   const { user } = useAuth();
+ 
+-  // Track online/offline status
++  const setSection = (id) => {
++    const next = new URLSearchParams(searchParams);
++    next.set('tab', id);
++    if (jobId) next.set('id', jobId);
++    setSearchParams(next, { replace: true });
++  };
++
+   React.useEffect(() => {
+     const handleOnline = () => setIsOnline(true);
+     const handleOffline = () => setIsOnline(false);
+@@ -61,14 +80,37 @@ export default function FieldJobDetail() {
+     };
+   }, []);
+ 
+-  /* ── Data queries ────────────────────────────────────────────────── */
+-  const { data: job, isLoading } = useQuery({
++  const { data: job, isLoading, isError, error } = useQuery({
+     queryKey: ['fj-job', jobId],
+-    queryFn:  () => jobId ? jobRepository.getJob(jobId) : Promise.resolve(null),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? jobRepository.getJob(jobId) : Promise.resolve(null)),
++    enabled: !!jobId,
+     staleTime: 30_000,
+   });
+ 
++  const { data: timeEntries = [] } = useQuery({
++    queryKey: ['fj-time-entries', jobId],
++    queryFn: () => (jobId ? apiClient.getTimeEntries(jobId) : Promise.resolve([])),
++    enabled: !!jobId,
++    staleTime: 15_000,
++  });
++
++  const workSegmentOpen = useMemo(
++    () => deriveTimerSessionFromTimeEntries(timeEntries).workSegmentOpen,
++    [timeEntries]
++  );
++
++  useEffect(() => {
++    if (!workSegmentOpen) return;
++    const id = setInterval(() => setHeaderTick((t) => t + 1), 1000);
++    return () => clearInterval(id);
++  }, [workSegmentOpen]);
++
++  const executionView = useMemo(() => {
++    void headerTick;
++    if (!job) return null;
++    return buildFieldJobExecutionView(job, timeEntries);
++  }, [job, timeEntries, headerTick]);
++
+   const techKey = getTechnicianIdForCanonicalEvents(user);
+   const contextDedupeKey = job ? buildCanonicalJobContextString(job, techKey) : '';
+ 
+@@ -88,107 +130,203 @@ export default function FieldJobDetail() {
+     return () => {
+       cancelled = true;
+     };
+-  }, [job?.id, contextDedupeKey, techKey, user]);
++  }, [job, contextDedupeKey, techKey, user]);
+ 
+   const { data: evidence = [] } = useQuery({
+     queryKey: ['fj-evidence', jobId],
+-    queryFn:  () => jobId ? apiClient.getEvidence(jobId) : Promise.resolve([]),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? apiClient.getEvidence(jobId) : Promise.resolve([])),
++    enabled: !!jobId,
+   });
+ 
+   const { data: labels = [] } = useQuery({
+     queryKey: ['fj-labels', jobId],
+-    queryFn:  () => jobId ? apiClient.getLabels(jobId) : Promise.resolve([]),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? apiClient.getLabels(jobId) : Promise.resolve([])),
++    enabled: !!jobId,
+   });
+ 
+   const { data: meetings = [] } = useQuery({
+     queryKey: ['fj-meetings', jobId],
+-    queryFn:  () => jobId ? apiClient.getMeetings(jobId) : Promise.resolve([]),
+-    enabled:  !!jobId,
++    queryFn: () => (jobId ? apiClient.getMeetings(jobId) : Promise.resolve([])),
++    enabled: !!jobId,
+   });
+ 
+   const { data: activities = [] } = useQuery({
+     queryKey: ['fj-activities', jobId],
+-    queryFn:  () => [],
+-    enabled:  false,
++    queryFn: () => [],
++    enabled: false,
+   });
+ 
+   const { data: auditLogs = [] } = useQuery({
+     queryKey: ['fj-audit', jobId],
+-    queryFn:  () => [],
+-    enabled:  false,
++    queryFn: () => [],
++    enabled: false,
+   });
+ 
+   const invalidateAll = () => {
+-    ['fj-job','fj-evidence','fj-labels','fj-meetings','fj-activities','fj-audit']
+-      .forEach(k => qc.invalidateQueries({ queryKey: [k, jobId] }));
++    [
++      'fj-job',
++      'fj-evidence',
++      'fj-labels',
++      'fj-meetings',
++      'fj-activities',
++      'fj-audit',
++      'fj-time-entries',
++    ].forEach((k) => qc.invalidateQueries({ queryKey: [k, jobId] }));
+   };
+ 
+-  /* ── Guards ──────────────────────────────────────────────────────── */
+-  if (!jobId) return <div className="p-10 text-center text-slate-400 text-sm">No job ID in URL</div>;
+-  if (isLoading) return (
+-    <div className="min-h-screen flex items-center justify-center">
+-      <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+-    </div>
+-  );
+-  if (!job) return <div className="p-10 text-center text-slate-400 text-sm">Job not found</div>;
++  if (!jobId) {
++    return <div className="p-10 text-center text-slate-400 text-sm">No job ID in URL</div>;
++  }
++  if (isLoading) {
++    return (
++      <div className="min-h-screen flex items-center justify-center">
++        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
++      </div>
++    );
++  }
++  if (isError) {
++    return (
++      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
++        <p className="text-sm font-semibold text-slate-800">Couldn&apos;t load this job</p>
++        <p className="text-xs text-slate-500 mt-2 max-w-sm">
++          {error instanceof Error ? error.message : 'Check your connection and try again.'}
++        </p>
++        <Link
++          to="/FieldJobs"
++          className="mt-6 text-sm font-bold text-slate-900 underline underline-offset-2"
++        >
++          Back to jobs
++        </Link>
++      </div>
++    );
++  }
++  if (!job || !executionView) {
++    return (
++      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center">
++        <p className="text-sm font-semibold text-slate-800">Job not found</p>
++        <p className="text-xs text-slate-500 mt-2">It may have been removed or you may not have access.</p>
++        <Link
++          to="/FieldJobs"
++          className="mt-6 text-sm font-bold text-slate-900 underline underline-offset-2"
++        >
++          Back to jobs
++        </Link>
++      </div>
++    );
++  }
+ 
+-  const tabProps = { job, evidence, labels, meetings, activities, auditLogs, onRefresh: invalidateAll };
+-  const activeDot = STATUS_DOT[job.status];
++  const tabProps = {
++    job,
++    evidence,
++    labels,
++    meetings,
++    activities,
++    auditLogs,
++    onRefresh: invalidateAll,
++  };
++
++  const nextStep = getNextStepMessage(job, evidence);
++  const runbookComplete =
++    job.runbook_phases?.every((phase) => phase.steps?.every((step) => step.completed)) ?? false;
++  const hasSignature = !!job.signoff_signature_url;
+ 
+-  // Pass full job data to tabs (not just evidence)
+-  const tabPropsWithJob = { ...tabProps };
++  const headerWorked = formatWorkedDuration(executionView.timer.workedSeconds);
+ 
+   return (
+     <div className="min-h-screen bg-slate-50 flex flex-col">
+-
+-      {/* ── Sticky header ──────────────────────────────────────────── */}
+       <div className="sticky top-0 z-30 bg-white border-b border-slate-100 shadow-sm">
+-        <div className="max-w-2xl mx-auto px-4 pt-3 pb-0">
+-
++        <div className="max-w-2xl mx-auto px-4 pt-3 pb-3">
+           <div className="flex items-center gap-3 mb-2">
+-            <Link to="/FieldJobs"
+-              className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center flex-shrink-0 transition-colors">
++            <Link
++              to="/FieldJobs"
++              className="h-8 w-8 rounded-lg bg-slate-100 hover:bg-slate-200 flex items-center justify-center flex-shrink-0 transition-colors"
++            >
+               <ArrowLeft className="h-4 w-4 text-slate-600" />
+             </Link>
+             <div className="flex-1 min-w-0">
+               <div className="flex items-center gap-2">
+-                {activeDot && <span className={cn('h-2 w-2 rounded-full flex-shrink-0 motion-safe:animate-pulse', activeDot)} />}
++                <span
++                  className={cn(
++                    'h-2 w-2 rounded-full flex-shrink-0 motion-safe:animate-pulse',
++                    executionView.lifecycle.dotClass
++                  )}
++                />
+                 <h1 className="text-sm font-black text-slate-900 truncate">{job.title}</h1>
+               </div>
+-              <p className="text-[10px] text-slate-400 truncate">{job.external_id} · {job.project_name}</p>
++              <p className="text-[10px] text-slate-400 truncate">
++                {job.external_id} · {job.project_name}
++              </p>
++              <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-1 text-[10px] text-slate-600">
++                <span className="font-bold">{executionView.lifecycle.label}</span>
++                <span className="text-slate-300" aria-hidden>
++                  ·
++                </span>
++                <span>
++                  {executionView.timer.workSegmentOpen ? 'Work timer on' : 'Work timer off'}
++                </span>
++                <span className="text-slate-300" aria-hidden>
++                  ·
++                </span>
++                <span className="font-mono tabular-nums text-slate-500">{headerWorked}</span>
++                <span className="text-slate-400">on job</span>
++              </div>
++              {nextStep && (
++                <p className="text-[11px] text-slate-600 mt-1.5 leading-snug line-clamp-2">
++                  {nextStep}
++                </p>
++              )}
+             </div>
+           </div>
+ 
+-          {/* Tab strip */}
+-          <div className="flex overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+-            {TABS.map(t => (
+-              <button key={t.id} onClick={() => setTab(t.id)}
++          <div
++            className="flex rounded-xl bg-slate-100 p-1 gap-0.5 overflow-x-auto"
++            style={{ scrollbarWidth: 'none' }}
++            role="tablist"
++            aria-label="Job sections"
++          >
++            {SECTIONS.map((s) => (
++              <button
++                key={s.id}
++                type="button"
++                role="tab"
++                aria-selected={section === s.id}
++                onClick={() => setSection(s.id)}
+                 className={cn(
+-                  'flex-shrink-0 py-2.5 px-3.5 text-[11px] font-bold border-b-2 transition-all',
+-                  tab === t.id ? 'border-slate-900 text-slate-900' : 'border-transparent text-slate-400 hover:text-slate-600'
+-                )}>
+-                {t.label}
++                  'flex-1 min-w-[4.25rem] py-2 px-1.5 rounded-lg text-[10px] font-bold transition-all whitespace-nowrap',
++                  section === s.id
++                    ? 'bg-white text-slate-900 shadow-sm'
++                    : 'text-slate-500 hover:text-slate-700'
++                )}
++              >
++                {s.label}
+               </button>
+             ))}
+           </div>
+         </div>
+       </div>
+ 
+-      {/* ── Tab content ────────────────────────────────────────────── */}
+       <div className="flex-1 max-w-2xl mx-auto w-full px-4 py-4 pb-10 space-y-4">
+         <OfflineEditsIndicator jobId={jobId} isOnline={isOnline} />
+         <UploadProgressIndicator jobId={jobId} isOnline={isOnline} />
+         <div>
+-          {tab === 'overview'  && <JobOverview       {...tabPropsWithJob} />}
+-          {tab === 'runbook'   && <RunbookSteps       {...tabPropsWithJob} />}
+-          {tab === 'evidence'  && <EvidenceGalleryView {...tabPropsWithJob} />}
+-          {tab === 'timelog'   && <FieldTimeTracker    {...tabPropsWithJob} />}
+-          {tab === 'meetings'  && <MeetingsTab         {...tabPropsWithJob} />}
+-          {tab === 'audit'     && <AuditTab            {...tabPropsWithJob} />}
++          {section === 'overview' && (
++            <JobOverview
++              {...tabProps}
++              timeEntries={timeEntries}
++              executionView={executionView}
++              onNavigateToSection={setSection}
++              runbookComplete={runbookComplete}
++              hasSignature={hasSignature}
++            />
++          )}
++          {section === 'runbook' && <RunbookSteps {...tabProps} />}
++          {section === 'evidence' && <EvidenceGalleryView {...tabProps} />}
++          {section === 'closeout' && (
++            <JobCloseoutSection job={job} auditLogs={auditLogs} onRefresh={invalidateAll} />
++          )}
++          {section === 'comms' && <JobCommsSection {...tabProps} />}
+         </div>
+       </div>
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/lib/fieldJobExecutionModel.ts b/src/lib/fieldJobExecutionModel.ts
+new file mode 100644
+index 0000000..1710130
+--- /dev/null
++++ b/src/lib/fieldJobExecutionModel.ts
+@@ -0,0 +1,181 @@
++/**
++ * Derived execution + work-session view for canonical FieldJobDetail.
++ * Authoritative inputs: job (lifecycle) + TimeEntry[] (work timer). No mutations/telemetry here.
++ */
++import type { Job, TimeEntry } from '@/api/client'
++
++export type TimerSessionKind = 'idle' | 'working' | 'on_break' | 'traveling'
++
++/** Lifecycle presentation shared by header, overview, and dots */
++export const LIFECYCLE_DISPLAY: Record<
++  Job['status'],
++  { label: string; dotClass: string; pillBg: string; pillText: string }
++> = {
++  assigned: {
++    label: 'Assigned',
++    dotClass: 'bg-slate-400',
++    pillBg: 'bg-slate-100',
++    pillText: 'text-slate-600',
++  },
++  en_route: {
++    label: 'En route',
++    dotClass: 'bg-cyan-500',
++    pillBg: 'bg-cyan-50',
++    pillText: 'text-cyan-700',
++  },
++  checked_in: {
++    label: 'Checked in',
++    dotClass: 'bg-purple-500',
++    pillBg: 'bg-purple-50',
++    pillText: 'text-purple-700',
++  },
++  in_progress: {
++    label: 'In progress',
++    dotClass: 'bg-blue-500',
++    pillBg: 'bg-blue-50',
++    pillText: 'text-blue-700',
++  },
++  paused: {
++    label: 'Paused',
++    dotClass: 'bg-amber-400',
++    pillBg: 'bg-amber-50',
++    pillText: 'text-amber-700',
++  },
++  pending_closeout: {
++    label: 'Ready for closeout',
++    dotClass: 'bg-orange-500',
++    pillBg: 'bg-orange-50',
++    pillText: 'text-orange-700',
++  },
++  submitted: {
++    label: 'Submitted',
++    dotClass: 'bg-green-500',
++    pillBg: 'bg-green-50',
++    pillText: 'text-green-700',
++  },
++  approved: {
++    label: 'Approved',
++    dotClass: 'bg-emerald-500',
++    pillBg: 'bg-emerald-50',
++    pillText: 'text-emerald-700',
++  },
++  rejected: {
++    label: 'Rejected',
++    dotClass: 'bg-red-500',
++    pillBg: 'bg-red-50',
++    pillText: 'text-red-700',
++  },
++}
++
++/** Same derivation pattern as TimerPanel (latest entry → UI state; chronological pairs → worked time). */
++export function deriveTimerSessionFromTimeEntries(entries: TimeEntry[]): {
++  kind: TimerSessionKind
++  sinceIso: string | null
++  workedSeconds: number
++  workSegmentOpen: boolean
++} {
++  const sortedChrono = [...entries].sort(
++    (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()
++  )
++  let ms = 0
++  let ws: Date | null = null
++  for (const e of sortedChrono) {
++    if (e.entry_type === 'work_start') ws = new Date(e.timestamp)
++    if (e.entry_type === 'work_stop' && ws) {
++      ms += new Date(e.timestamp).getTime() - ws.getTime()
++      ws = null
++    }
++  }
++  if (ws) ms += Date.now() - ws.getTime()
++  const workedSeconds = Math.floor(ms / 1000)
++  const workSegmentOpen = ws !== null
++
++  if (!entries.length) {
++    return { kind: 'idle', sinceIso: null, workedSeconds: 0, workSegmentOpen: false }
++  }
++  const latest = [...entries].sort(
++    (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
++  )[0]
++  const map: Partial<Record<TimeEntry['entry_type'], TimerSessionKind>> = {
++    work_start: 'working',
++    break_start: 'on_break',
++    travel_start: 'traveling',
++  }
++  const kind = map[latest.entry_type] ?? 'idle'
++  return { kind, sinceIso: latest.timestamp, workedSeconds, workSegmentOpen }
++}
++
++export function formatWorkedDuration(totalSeconds: number): string {
++  const s = Math.max(0, Math.floor(totalSeconds))
++  const h = Math.floor(s / 3600)
++  const m = Math.floor((s % 3600) / 60)
++  const sec = s % 60
++  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`
++}
++
++export interface FieldJobExecutionView {
++  lifecycle: (typeof LIFECYCLE_DISPLAY)[Job['status']]
++  timer: ReturnType<typeof deriveTimerSessionFromTimeEntries>
++  /** Work timer start/stop (TimeEntry work_start / work_stop) */
++  canClockIn: boolean
++  canClockOut: boolean
++  clockInDisabledReason: string | null
++  /** True when job is in progress but no open work_start — honest gap */
++  inProgressWithoutOpenTimer: boolean
++  sessionSummaryLine: string
++}
++
++export function buildFieldJobExecutionView(job: Job, timeEntries: TimeEntry[]): FieldJobExecutionView {
++  const lifecycle = LIFECYCLE_DISPLAY[job.status] ?? LIFECYCLE_DISPLAY.assigned
++  const timer = deriveTimerSessionFromTimeEntries(timeEntries)
++
++  let clockInDisabledReason: string | null = null
++  let canClockIn = false
++  let canClockOut = false
++
++  if (job.status === 'paused') {
++    clockInDisabledReason = 'Job is paused — resume work in Job state before using the work timer.'
++  } else if (job.status === 'assigned' || job.status === 'en_route') {
++    clockInDisabledReason = 'Use Job state to go en route and check in before starting a work timer.'
++  } else if (
++    job.status === 'pending_closeout' ||
++    job.status === 'submitted' ||
++    job.status === 'approved' ||
++    job.status === 'rejected'
++  ) {
++    clockInDisabledReason = 'Work timer is not available for this job stage.'
++  } else if (job.status === 'checked_in' || job.status === 'in_progress') {
++    if (timer.workSegmentOpen) {
++      clockInDisabledReason = 'End the current work segment before starting a new one.'
++      canClockIn = false
++      canClockOut = true
++    } else {
++      canClockIn = true
++      canClockOut = false
++      clockInDisabledReason = null
++    }
++  }
++
++  const inProgressWithoutOpenTimer = job.status === 'in_progress' && !timer.workSegmentOpen
++
++  let sessionSummaryLine: string
++  if (job.status === 'paused') {
++    sessionSummaryLine = 'Job paused — timer actions disabled until you resume.'
++  } else if (timer.workSegmentOpen) {
++    sessionSummaryLine = `Work timer running · ${formatWorkedDuration(timer.workedSeconds)} logged this job`
++  } else if (job.status === 'in_progress' || job.status === 'checked_in') {
++    sessionSummaryLine = 'No active work timer — start when you begin billable work on site.'
++  } else {
++    sessionSummaryLine = 'Work timer unlocks after check-in / start work in Job state.'
++  }
++
++  return {
++    lifecycle,
++    timer,
++    canClockIn,
++    canClockOut,
++    clockInDisabledReason,
++    inProgressWithoutOpenTimer,
++    sessionSummaryLine,
++  }
++}
+diff --git a/src/lib/__tests__/fieldJobExecutionModel.test.ts b/src/lib/__tests__/fieldJobExecutionModel.test.ts
+new file mode 100644
+index 0000000..1d1506d
+--- /dev/null
++++ b/src/lib/__tests__/fieldJobExecutionModel.test.ts
+@@ -0,0 +1,66 @@
++import { describe, it, expect } from 'vitest'
++import {
++  deriveTimerSessionFromTimeEntries,
++  buildFieldJobExecutionView,
++  formatWorkedDuration,
++} from '@/lib/fieldJobExecutionModel'
++import type { Job, TimeEntry } from '@/api/client'
++
++const baseJob = {
++  id: 'j1',
++  title: 'T',
++  status: 'in_progress' as Job['status'],
++  priority: 'medium' as Job['priority'],
++  approved_for_training: false,
++} as Job
++
++function te(
++  entry_type: TimeEntry['entry_type'],
++  timestamp: string,
++  id = '1'
++): TimeEntry {
++  return {
++    id,
++    job_id: 'j1',
++    entry_type,
++    timestamp,
++    source: 'app',
++    sync_status: 'pending',
++    locked: false,
++    created_date: timestamp,
++    updated_date: timestamp,
++    created_by: 'a@b.com',
++  }
++}
++
++describe('fieldJobExecutionModel', () => {
++  it('deriveTimerSessionFromTimeEntries: open work segment', () => {
++    const entries = [te('work_start', '2026-01-01T10:00:00.000Z')]
++    const r = deriveTimerSessionFromTimeEntries(entries)
++    expect(r.workSegmentOpen).toBe(true)
++    expect(r.kind).toBe('working')
++    expect(r.workedSeconds).toBeGreaterThanOrEqual(0)
++  })
++
++  it('deriveTimerSessionFromTimeEntries: closed pair', () => {
++    const entries = [
++      te('work_start', '2026-01-01T10:00:00.000Z', '1'),
++      te('work_stop', '2026-01-01T11:00:00.000Z', '2'),
++    ]
++    const r = deriveTimerSessionFromTimeEntries(entries)
++    expect(r.workSegmentOpen).toBe(false)
++    expect(r.kind).toBe('idle')
++    expect(r.workedSeconds).toBe(3600)
++  })
++
++  it('buildFieldJobExecutionView: gates clock by lifecycle', () => {
++    const assigned = { ...baseJob, status: 'assigned' as const }
++    const v = buildFieldJobExecutionView(assigned, [])
++    expect(v.canClockIn).toBe(false)
++    expect(v.clockInDisabledReason).toContain('Job state')
++  })
++
++  it('formatWorkedDuration', () => {
++    expect(formatWorkedDuration(3661)).toBe('01:01:01')
++  })
++})
+diff --git a/src/components/fieldv2/JobCloseoutSection.jsx b/src/components/fieldv2/JobCloseoutSection.jsx
+new file mode 100644
+index 0000000..4538cea
+--- /dev/null
++++ b/src/components/fieldv2/JobCloseoutSection.jsx
+@@ -0,0 +1,60 @@
++/**
++ * Closeout — sign-off, final validation, audit/history (secondary).
++ * Lifecycle transitions live on Overview (JobStateTransitioner).
++ */
++import React from 'react';
++import { useQueryClient } from '@tanstack/react-query';
++import AuditTab from './AuditTab';
++import SignoffCapture from '@/components/field/SignoffCapture';
++
++export default function JobCloseoutSection({
++  job,
++  auditLogs,
++  onRefresh,
++}) {
++  const qc = useQueryClient();
++
++  const showSignoff = job.status === 'pending_closeout' && !job.signoff_signature_url;
++
++  return (
++    <div className="space-y-6">
++      <div>
++        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
++          Closeout
++        </p>
++        <p className="text-xs text-slate-600 leading-snug">
++          Use Overview to move the job into closeout when work is complete. Here: sign-off, then activity
++          for reference.
++        </p>
++      </div>
++
++      {showSignoff && (
++        <div className="bg-white rounded-xl border border-slate-100 p-4">
++          <SignoffCapture
++            job={job}
++            onComplete={() => {
++              qc.invalidateQueries({ queryKey: ['fj-job', job.id] });
++              onRefresh?.();
++            }}
++          />
++        </div>
++      )}
++
++      {job.status === 'pending_closeout' && job.signoff_signature_url && (
++        <p className="text-xs text-emerald-700 font-semibold bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-2">
++          Sign-off is on file for this job.
++        </p>
++      )}
++
++      <div className="pt-2 border-t border-slate-200 opacity-95">
++        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
++          Activity on this job
++        </p>
++        <p className="text-[11px] text-slate-500 mb-3">
++          Audit events and system actions (when synced from the server).
++        </p>
++        <AuditTab auditLogs={auditLogs} />
++      </div>
++    </div>
++  );
++}

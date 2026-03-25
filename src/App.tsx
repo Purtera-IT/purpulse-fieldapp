@@ -6,8 +6,10 @@ import AdminDevPanel from './pages/AdminDevPanel'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { queryClientInstance } from '@/lib/query-client'
 import { pagesConfig } from './pages.config'
-import { BrowserRouter as Router, Route, Routes } from 'react-router-dom'
-import PageNotFound from './lib/PageNotFound'
+import { BrowserRouter as Router, Route, Routes, Navigate } from 'react-router-dom'
+import LegacyJobDetailRedirect from '@/components/routing/LegacyJobDetailRedirect'
+import { CANONICAL_JOBS_PATH } from '@/utils/fieldRoutes'
+import PageNotFound from './pages/PageNotFound'
 import { AuthProvider, useAuth } from '@/lib/AuthContext'
 import UserNotRegisteredError from '@/components/UserNotRegisteredError'
 import AuthErrorBoundary from '@/components/AuthErrorBoundary'
@@ -31,12 +33,9 @@ interface LayoutWrapperProps {
 interface PagesConfig {
   Pages: Record<string, React.ComponentType>
   Layout?: React.ComponentType<LayoutWrapperProps>
-  mainPage?: string
 }
 
-const { Pages, Layout, mainPage } = pagesConfig as PagesConfig
-const mainPageKey = mainPage ?? Object.keys(Pages)[0]
-const MainPage = mainPageKey ? Pages[mainPageKey] : () => null
+const { Pages, Layout } = pagesConfig as PagesConfig
 
 const LayoutWrapper: React.FC<LayoutWrapperProps> = ({ children, currentPageName }) =>
   Layout ? (
@@ -44,6 +43,8 @@ const LayoutWrapper: React.FC<LayoutWrapperProps> = ({ children, currentPageName
   ) : (
     <>{children}</>
   )
+
+const LEGACY_TAB_REDIRECT = CANONICAL_JOBS_PATH
 
 interface UseAuthReturn {
   isLoadingAuth: boolean
@@ -77,14 +78,30 @@ const AuthenticatedApp: React.FC = () => {
   // Render the main app
   return (
     <Routes>
+      <Route path="/" element={<Navigate to={CANONICAL_JOBS_PATH} replace />} />
+
       <Route
-        path="/"
+        path="/FieldJobs"
         element={
-          <LayoutWrapper currentPageName={mainPageKey}>
-            <MainPage />
+          <LayoutWrapper currentPageName="FieldJobs">
+            <FieldJobs />
           </LayoutWrapper>
         }
       />
+      <Route
+        path="/FieldJobDetail"
+        element={
+          <LayoutWrapper currentPageName="FieldJobDetail">
+            <FieldJobDetail />
+          </LayoutWrapper>
+        }
+      />
+
+      <Route path="/Jobs" element={<Navigate to={CANONICAL_JOBS_PATH} replace />} />
+      <Route path="/JobDetail" element={<LegacyJobDetailRedirect />} />
+      <Route path="/Chat" element={<Navigate to={LEGACY_TAB_REDIRECT} replace />} />
+      <Route path="/TimeLog" element={<Navigate to={LEGACY_TAB_REDIRECT} replace />} />
+
       {Object.entries(Pages).map(([path, Page]) => (
         <Route
           key={path}
@@ -96,9 +113,6 @@ const AuthenticatedApp: React.FC = () => {
           }
         />
       ))}
-      {/* ── New Field App v2 pages (no Layout shell) ── */}
-      <Route path="/FieldJobs" element={<FieldJobs />} />
-      <Route path="/FieldJobDetail" element={<FieldJobDetail />} />
       <Route
         path="/AdminDevPanel"
         element={

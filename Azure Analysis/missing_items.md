@@ -2,7 +2,7 @@
 
 This file groups the biggest field-app gaps by event family and explains **why** each item is missing or partial, where the nearest existing code lives, and what should change next.
 
-> **Document status (March 2026):** The **P0 / P1 / P2** sections in the collapsible block below were written as a **pre-canonical** gap inventory. The field app **now** implements the canonical path: envelope + IndexedDB queue + per-family emitters and JSON Schemas (see [CURSOR_FIELD_APP_ITERATIONS.md](../CURSOR_FIELD_APP_ITERATIONS.md) **Implemented** blocks, [canonical_event_loader_mapping.md](./canonical_event_loader_mapping.md), and [audit_command_results.md](./audit_command_results.md)). **Do not** read the opening historical P0s as “the app still has no envelope.”
+> **Document status (March 2026):** The **P0 / P1 / P2** sections in the collapsible block below were written as a **pre-canonical** gap inventory. The field app **now** implements the canonical path: envelope + IndexedDB queue + per-family emitters and JSON Schemas (see [CURSOR_FIELD_APP_ITERATIONS.md](../docs/planning/CURSOR_FIELD_APP_ITERATIONS.md) **Implemented** blocks, [canonical_event_loader_mapping.md](./canonical_event_loader_mapping.md), and [audit_command_results.md](./audit_command_results.md)). **Do not** read the opening historical P0s as “the app still has no envelope.”
 >
 > **Live backlog (verify in code + [coverage_matrix.md](./coverage_matrix.md)):** e.g. `domain_tool_log` / advanced geofence tokens, atlas fields not yet on a schema, and observability dashboards — not a missing telemetry spine.
 

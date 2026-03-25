@@ -12,6 +12,11 @@ import { toast } from 'sonner';
 import EvidenceCaptureModal from './EvidenceCaptureModal';
 import { useAuth } from '@/lib/AuthContext';
 import { emitRunbookStepEvent } from '@/lib/runbookStepEvent';
+import {
+  FIELD_CARD,
+  FIELD_CTRL_H,
+  FIELD_OVERLINE,
+} from '@/lib/fieldVisualTokens';
 
 // ── Timer hook ─────────────────────────────────────────────────────────
 function useStepTimer(running) {
@@ -136,7 +141,7 @@ function RunbookStep({ step, job, jobId, runbookPhaseMeta, evidence, adapters, o
 
   return (
     <>
-    <div className={cn('bg-white rounded-xl border transition-all', status === 'failed' ? 'border-red-200' : status === 'complete' ? 'border-emerald-200' : 'border-slate-100')}>
+    <div className={cn(FIELD_CARD, 'transition-all', status === 'failed' ? 'border-red-200' : status === 'complete' ? 'border-emerald-200' : '')}>
       {/* Header row */}
       <button onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-3 px-4 py-3.5 text-left">
@@ -159,10 +164,10 @@ function RunbookStep({ step, job, jobId, runbookPhaseMeta, evidence, adapters, o
 
       {/* Expanded content */}
       {open && (
-        <div className="px-4 pb-4 space-y-3 border-t border-slate-50">
+        <div className="px-4 pb-4 space-y-3 border-t border-slate-100">
           {/* Notes */}
           <div className="pt-2">
-            <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Notes</label>
+            <label className={cn(FIELD_OVERLINE, 'mb-1 block')}>Notes</label>
             <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
               placeholder="Add step notes…"
               className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-slate-400" />
@@ -172,25 +177,25 @@ function RunbookStep({ step, job, jobId, runbookPhaseMeta, evidence, adapters, o
           <div className="flex flex-wrap gap-2">
             {status === 'idle' && (
               <button onClick={handleStart}
-                className="flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-blue-600 text-white text-xs font-bold hover:bg-blue-700">
+                className={cn('flex items-center gap-1.5 px-3 bg-blue-600 text-white text-xs font-bold hover:bg-blue-700 rounded-xl', FIELD_CTRL_H)}>
                 <Play className="h-3.5 w-3.5" /> Start
               </button>
             )}
             {status === 'in_progress' && (
               <>
                 <button onClick={handleComplete}
-                  className="flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700">
+                  className={cn('flex items-center gap-1.5 px-3 bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 rounded-xl', FIELD_CTRL_H)}>
                   <CheckCircle2 className="h-3.5 w-3.5" /> Complete
                 </button>
                 <button onClick={handleFail}
-                  className="flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-red-600 text-white text-xs font-bold hover:bg-red-700">
+                  className={cn('flex items-center gap-1.5 px-3 bg-red-600 text-white text-xs font-bold hover:bg-red-700 rounded-xl', FIELD_CTRL_H)}>
                   <XCircle className="h-3.5 w-3.5" /> Fail
                 </button>
               </>
             )}
             {status !== 'idle' && (
               <button onClick={() => setShowCapture(true)}
-                className="flex items-center gap-1.5 h-8 px-3 rounded-[8px] bg-slate-900 text-white text-xs font-bold hover:bg-slate-700">
+                className={cn('flex items-center gap-1.5 px-3 bg-slate-900 text-white text-xs font-bold hover:bg-slate-800 rounded-xl', FIELD_CTRL_H)}>
                 <Paperclip className="h-3.5 w-3.5" /> Attach Evidence
               </button>
             )}
@@ -199,7 +204,7 @@ function RunbookStep({ step, job, jobId, runbookPhaseMeta, evidence, adapters, o
           {/* Linked evidence */}
           {stepEvidence.length > 0 && (
             <div>
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1.5">Linked Evidence</p>
+              <p className={cn(FIELD_OVERLINE, 'mb-1.5')}>Linked Evidence</p>
               <div className="flex gap-2 flex-wrap">
                 {stepEvidence.map(e => <EvidenceThumbnail key={e.id} ev={e} />)}
               </div>
@@ -212,6 +217,7 @@ function RunbookStep({ step, job, jobId, runbookPhaseMeta, evidence, adapters, o
     {showCapture && (
       <EvidenceCaptureModal
         jobId={jobId}
+        job={job}
         stepId={step.id}
         adapter={adapters?.upload}
         onClose={() => setShowCapture(false)}
@@ -240,9 +246,9 @@ export default function RunbookSteps({ job, evidence, adapters, onRefresh }) {
   return (
     <div className="space-y-3">
       {/* Progress */}
-      <div className="bg-white rounded-xl border border-slate-100 px-4 py-3">
+      <div className={cn(FIELD_CARD, 'px-4 py-3')}>
         <div className="flex items-center justify-between mb-1.5">
-          <p className="text-xs font-black text-slate-500">{runbook?.title || 'Runbook'} v{runbook?.version}</p>
+          <p className="text-xs font-semibold text-slate-600">{runbook?.title || 'Runbook'} v{runbook?.version}</p>
           <span className="text-[11px] text-slate-400 tabular-nums">{completedCount}/{steps.length} steps</span>
         </div>
         <div className="h-1.5 bg-slate-100 rounded-full overflow-hidden">

@@ -2,6 +2,11 @@
 .env
 .env.*
 
+# Local env variants (never commit)
+.env.local
+.env.*.local
+.env.production.local
+
 # Logs
 /logs
 *.log
@@ -14,7 +19,14 @@ lerna-debug.log*
 node_modules
 dist
 dist-ssr
+storybook-static
 *.local
+
+# Testing / tooling
+coverage/
+.nyc_output/
+.vite/
+.cache/
 
 # Editor directories and files
 .vscode/*

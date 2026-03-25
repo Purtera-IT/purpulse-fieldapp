@@ -1,6 +1,6 @@
 # Iteration 13 — Client QA notes (field app)
 
-Cross-cutting checks from [FIELD_APP_TECHPULSE_AZURE_README.md](../FIELD_APP_TECHPULSE_AZURE_README.md) §10. Automated coverage lives in Vitest:
+Cross-cutting checks from [FIELD_APP_TECHPULSE_AZURE_README.md](../docs/planning/FIELD_APP_TECHPULSE_AZURE_README.md) §10. Automated coverage lives in Vitest:
 
 | §10 expectation | Client behavior | Automated test |
 |-----------------|-----------------|----------------|

@@ -10,6 +10,7 @@ import {
   CheckSquare, Square, ExternalLink, Package,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { fieldJobDetailUrl } from '@/utils/fieldRoutes';
 import { format, parseISO } from 'date-fns';
 import { PRIORITY_CFG, STATUS_CFG } from './JobRichCard';
 
@@ -232,7 +233,7 @@ export default function JobsTable({ jobs, total, page, pageSize, sort, onSort, o
                     {/* Actions */}
                     <td className="px-3 py-2">
                       <Link
-                        to={`/JobDetail?id=${job.id}`}
+                        to={fieldJobDetailUrl(job.id)}
                         className="h-7 w-7 rounded-[8px] bg-slate-100 hover:bg-slate-200 flex items-center justify-center transition-colors"
                         aria-label={`Open ${job.title}`}
                       >

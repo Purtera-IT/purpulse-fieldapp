@@ -20,6 +20,8 @@ import {
   allScopeAcknowledgementsTrue,
   emptyScopeAcknowledgementState,
 } from '@/constants/scopeAcknowledgements';
+import { FIELD_CARD, FIELD_OVERLINE, FIELD_SURFACE_MUTED } from '@/lib/fieldVisualTokens';
+import { cn } from '@/lib/utils';
 
 const ITEMS = [
   { key: 'ppe', label: 'PPE appropriate for this site / task is available and in use' },
@@ -104,8 +106,8 @@ export default function PreJobToolCheckModal({ open, onOpenChange, job, user, on
           </DialogDescription>
         </DialogHeader>
 
-        <div className="rounded-xl border border-slate-100 bg-slate-50/80 p-3 space-y-2">
-          <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-500 uppercase tracking-wide">
+        <div className={cn(FIELD_SURFACE_MUTED, 'p-3 space-y-2')}>
+          <div className={cn('flex items-center gap-1.5', FIELD_OVERLINE)}>
             <Shield className="h-3 w-3" /> Job: {job?.title || job?.external_id || job?.id}
           </div>
           {ITEMS.map((item) => (
@@ -124,8 +126,8 @@ export default function PreJobToolCheckModal({ open, onOpenChange, job, user, on
           ))}
         </div>
 
-        <div className="rounded-xl border border-slate-100 bg-white p-3 space-y-2">
-          <p className="text-[10px] font-bold text-slate-500 uppercase tracking-wide">Scope &amp; docs (Iteration 11)</p>
+        <div className={cn(FIELD_CARD, 'p-3 space-y-2')}>
+          <p className={FIELD_OVERLINE}>Scope &amp; docs (Iteration 11)</p>
           <p className="text-[10px] text-slate-500 leading-snug">
             Same signals as pre-arrival <code className="text-[9px]">arrival_event</code> flags — recorded on this{' '}
             <code className="text-[9px]">tool_check_event</code> when you start from overview/state machine.

@@ -6,8 +6,14 @@ import { Input } from '@/components/ui/input';
 import { Send, Loader2 } from 'lucide-react';
 import { format } from 'date-fns';
 import { cn } from '@/lib/utils';
+import { toast } from 'sonner';
 
-export default function ChatView({ jobId }) {
+/**
+ * Job-scoped message list + composer. Constrained operational surface—not a consumer chat product.
+ * @param {string} jobId
+ * @param {{ id?: string, title?: string, external_id?: string }} [job] — optional context strip (title / work order id)
+ */
+export default function ChatView({ jobId, job }) {
   const [message, setMessage] = useState('');
   const scrollRef = useRef(null);
   const queryClient = useQueryClient();
@@ -46,6 +52,9 @@ export default function ChatView({ jobId }) {
       queryClient.invalidateQueries({ queryKey: ['chat-messages', jobId] });
       setMessage('');
     },
+    onError: () => {
+      toast.error('Could not send update. Check connection and try again.');
+    },
   });
 
   const handleSend = () => {
@@ -54,43 +63,53 @@ export default function ChatView({ jobId }) {
   };
 
   return (
-    <div className="flex flex-col h-full">
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
+    <div className="flex flex-col h-full min-h-0">
+      {job && (job.title || job.external_id) && (
+        <div className="px-3 pt-2.5 pb-2 border-b border-slate-100 bg-slate-50/90 shrink-0">
+          <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">This work order</p>
+          <p className="text-xs font-semibold text-slate-800 truncate font-mono">{job.external_id || job.id}</p>
+          {job.title ? <p className="text-[11px] text-slate-600 truncate mt-0.5">{job.title}</p> : null}
+        </div>
+      )}
+
+      <div ref={scrollRef} className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
         {isLoading ? (
           <div className="flex justify-center py-8">
             <Loader2 className="h-5 w-5 animate-spin text-slate-400" />
           </div>
         ) : messages.length === 0 ? (
-          <div className="text-center py-12 text-slate-400 text-sm">
-            No messages yet. Start the conversation.
+          <div className="text-center py-10 px-2 text-slate-500 text-sm leading-relaxed">
+            No job updates yet. Post a short note for dispatch or your PM—routine status and on-site coordination
+            only.
           </div>
         ) : (
           messages.map((msg) => {
             const isOwn = msg.sender_email === currentUser?.email || msg.created_by === currentUser?.email;
             return (
               <div key={msg.id} className={cn('flex', isOwn ? 'justify-end' : 'justify-start')}>
-                <div className={cn(
-                  'max-w-[80%] rounded-2xl px-3.5 py-2.5',
-                  isOwn ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-900'
-                )}>
+                <div
+                  className={cn(
+                    'max-w-[80%] rounded-2xl px-3.5 py-2.5',
+                    isOwn ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-900'
+                  )}
+                >
                   {!isOwn && (
                     <p className="text-xs font-medium text-slate-500 mb-0.5">{msg.sender_name || 'User'}</p>
                   )}
                   <p className="text-sm leading-relaxed">{msg.body}</p>
-                  {msg.attachments?.map((att, i) => (
-                    att.file_url && (
+                  {msg.attachments?.map((att, i) =>
+                    att.file_url ? (
                       <img key={i} src={att.file_url} alt="attachment" className="mt-2 rounded-lg max-h-40 object-cover" />
-                    )
-                  ))}
-                  <div className={cn(
-                    'flex items-center gap-1.5 mt-1',
-                    isOwn ? 'justify-end' : 'justify-start'
-                  )}>
+                    ) : null
+                  )}
+                  <div className={cn('flex items-center gap-1.5 mt-1', isOwn ? 'justify-end' : 'justify-start')}>
                     <span className={cn('text-xs', isOwn ? 'text-white/40' : 'text-slate-400')}>
                       {msg.sent_at ? format(new Date(msg.sent_at), 'h:mm a') : ''}
                     </span>
                     {msg.sync_status === 'pending' && (
-                      <span className="text-xs text-amber-400">●</span>
+                      <span className="text-[10px] text-amber-500 font-medium" title="Sync pending">
+                        …
+                      </span>
                     )}
                   </div>
                 </div>
@@ -100,20 +119,22 @@ export default function ChatView({ jobId }) {
         )}
       </div>
 
-      <div className="border-t border-slate-100 p-3 bg-white">
+      <div className="border-t border-slate-100 p-3 bg-white shrink-0">
         <div className="flex items-center gap-2">
           <Input
             value={message}
             onChange={(e) => setMessage(e.target.value)}
-            placeholder="Type a message..."
+            placeholder="Add a job update…"
             className="rounded-full bg-slate-50 border-0 focus-visible:ring-1"
             onKeyDown={(e) => e.key === 'Enter' && !e.shiftKey && handleSend()}
+            aria-label="Job update message"
           />
           <Button
             size="icon"
             className="rounded-full bg-slate-900 hover:bg-slate-800 h-10 w-10 flex-shrink-0"
             onClick={handleSend}
             disabled={!message.trim() || sendMessage.isPending}
+            aria-label="Send update"
           >
             {sendMessage.isPending ? (
               <Loader2 className="h-4 w-4 animate-spin" />

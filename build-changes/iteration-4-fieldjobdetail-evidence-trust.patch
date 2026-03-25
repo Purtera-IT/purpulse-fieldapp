@@ -1,0 +1,1363 @@
+diff --git a/src/api/types.ts b/src/api/types.ts
+index b637b47..b030a1a 100644
+--- a/src/api/types.ts
++++ b/src/api/types.ts
+@@ -67,11 +67,20 @@ export const TechnicianSchema = BaseEntity.extend({
+ export type Technician = z.infer<typeof TechnicianSchema>
+ 
+ // ── Evidence / Asset ──
++// file_url: allow data URLs and other non-http schemes returned by the field client
++const EvidenceFileUrlSchema = z.union([
++  z.string().url(),
++  z.string().refine((s) => typeof s === 'string' && (s.startsWith('data:') || s.startsWith('mock://')), {
++    message: 'expected data: or mock: URL',
++  }),
++])
++
+ export const EvidenceSchema = BaseEntity.extend({
+   job_id: z.string(),
+   evidence_type: z.string(),
+-  file_url: z.string().url(),
++  file_url: EvidenceFileUrlSchema,
+   thumbnail_url: z.string().url().optional(),
++  azure_blob_url: z.string().optional(),
+   content_type: z.string().optional(),
+   size_bytes: z.number().optional(),
+   sha256: z.string().optional(),
+@@ -81,8 +90,12 @@ export const EvidenceSchema = BaseEntity.extend({
+   geo_altitude_m: z.number().optional(),
+   geo_accuracy_m: z.number().optional(),
+   status: z.enum(['pending_upload', 'uploading', 'uploaded', 'error', 'replaced']),
++  upload_error: z.string().optional(),
+   quality_score: z.number().min(0).max(100).optional(),
+   quality_warning: z.string().optional(),
++  qc_status: z.string().optional(),
++  runbook_step_id: z.string().optional(),
++  exif_metadata: z.record(z.unknown()).optional(),
+   notes: z.string().optional(),
+   approved_for_training: z.boolean(),
+ })
+diff --git a/src/components/fieldv2/EvidenceCaptureModal.jsx b/src/components/fieldv2/EvidenceCaptureModal.jsx
+index 84a7f12..42d0103 100644
+--- a/src/components/fieldv2/EvidenceCaptureModal.jsx
++++ b/src/components/fieldv2/EvidenceCaptureModal.jsx
+@@ -1,153 +1,241 @@
+ /**
+- * EvidenceCaptureModal — Evidence capture / upload (D)
+- * Camera/gallery selection, preview, step selector, notes, progress.
+- * Calls adapter.requestUploadToken() → fake upload → adapter.completeUpload()
+- * Then creates a manifest row.
++ * EvidenceCaptureModal — Capture, map to requirement type / optional runbook step, save evidence row.
++ * Uses adapter.requestUploadToken → adapter.completeUpload (real persistence) + manifest row with honest sync flags.
+  */
+-import React, { useState, useRef } from 'react';
+-import { X, Camera, Images, RotateCw, Upload, CheckCircle2, Loader2 } from 'lucide-react';
++import React, { useState, useRef, useEffect } from 'react';
++import { X, Camera, Images, RotateCw, Upload, CheckCircle2, Loader2, AlertCircle } from 'lucide-react';
+ import { toast } from 'sonner';
+ import { uuidv4 } from '@/lib/uuid';
+ import { defaultAdapters } from '@/lib/fieldAdapters';
+-
+-const EVIDENCE_TYPES = ['before_photo','after_photo','equipment_label','site_photo','general'];
++import {
++  buildEvidenceTypeOptions,
++  flattenRunbookSteps,
++  getStorageNoteForFileUrl,
++} from '@/lib/fieldEvidenceViewModel';
+ 
+ async function hashFile(file) {
+   const buf = await file.arrayBuffer();
+   const hash = await crypto.subtle.digest('SHA-256', buf);
+-  return Array.from(new Uint8Array(hash)).map(b => b.toString(16).padStart(2,'0')).join('');
++  return Array.from(new Uint8Array(hash)).map((b) => b.toString(16).padStart(2, '0')).join('');
+ }
+ 
+-function fakeProgress(onProgress) {
+-  return new Promise(resolve => {
+-    let p = 0;
+-    const id = setInterval(() => {
+-      p = Math.min(p + Math.random() * 18 + 8, 95);
+-      onProgress(Math.round(p));
+-      if (p >= 95) { clearInterval(id); resolve(); }
+-    }, 150);
+-  });
++function manifestSyncStatusFromToken(token) {
++  if (token?.is_simulated_storage === true) return 'pending';
++  const u = String(token?.upload_url || '');
++  if (/^https:\/\//i.test(u)) return 'synced';
++  return 'pending';
+ }
+ 
+ export default function EvidenceCaptureModal({
+-  jobId, stepId, adapter = defaultAdapters.upload,
+-  onClose, onSuccess
++  jobId,
++  job = null,
++  stepId = null,
++  initialEvidenceType = null,
++  initialRunbookStepId = null,
++  adapter = defaultAdapters.upload,
++  onClose,
++  onSuccess,
+ }) {
+-  const [file,     setFile]     = useState(null);
+-  const [preview,  setPreview]  = useState(null);
+-  const [evType,   setEvType]   = useState('general');
+-  const [notes,    setNotes]    = useState('');
+-  const [progress, setProgress] = useState(0);
+-  const [phase,    setPhase]    = useState('select'); // select | preview | uploading | done
++  const [file, setFile] = useState(null);
++  const [preview, setPreview] = useState(null);
++  const [evType, setEvType] = useState(() => initialEvidenceType || 'general');
++  const [selectedStepId, setSelectedStepId] = useState(() => initialRunbookStepId ?? stepId ?? '');
++  const [notes, setNotes] = useState('');
++  const [phase, setPhase] = useState('select'); // select | preview | saving | done | error
++  const [errorMessage, setErrorMessage] = useState('');
++  const [manifestWarning, setManifestWarning] = useState(null);
++  const [doneSummary, setDoneSummary] = useState(null);
+   const [rotation, setRotation] = useState(0);
+   const inputRef = useRef(null);
+ 
++  useEffect(() => {
++    setEvType(initialEvidenceType || 'general');
++    setSelectedStepId(initialRunbookStepId ?? stepId ?? '');
++  }, [initialEvidenceType, initialRunbookStepId, stepId]);
++
++  const typeOptions = buildEvidenceTypeOptions(job);
++  const runbookSteps = flattenRunbookSteps(job);
++  const effectiveRunbookStepId = selectedStepId ? selectedStepId : undefined;
++
+   const handleFile = (f) => {
+     if (!f) return;
+     setFile(f);
+     const reader = new FileReader();
+-    reader.onload = e => setPreview(e.target.result);
++    reader.onload = (e) => setPreview(e.target.result);
+     reader.readAsDataURL(f);
+     setPhase('preview');
+   };
+ 
+-  const handleUpload = async () => {
++  const handleSave = async () => {
+     if (!file) return;
+-    setPhase('uploading');
+-    setProgress(0);
+-
+-    const sha256 = await hashFile(file).catch(() => 'sha256-placeholder-' + uuidv4().slice(0,8));
+-    const token  = await adapter.requestUploadToken(file, jobId, stepId);
+-
+-    await fakeProgress(setProgress);
+-    setProgress(100);
+-
+-    const evidenceId = uuidv4();
+-    const nowIso     = new Date().toISOString();
+-
+-    const evidenceData = {
+-      id:              evidenceId,
+-      job_id:          jobId,
+-      evidence_type:   evType,
+-      file_url:        preview,
+-      content_type:    file.type,
+-      size_bytes:      file.size,
+-      sha256,
+-      captured_at:     nowIso,
+-      status:          'uploaded',
+-      runbook_step_id: stepId || null,
+-      notes:           notes || undefined,
+-      approved_for_training: false,
+-    };
+-
+-    const record = await adapter.completeUpload(token, evidenceData);
+-
+-    await adapter.createManifestRow({
+-      job_id:            jobId,
+-      evidence_id:       record.id || evidenceId,
+-      filename:          file.name,
+-      sha256,
+-      file_url:          preview,
+-      azure_blob_url:    token.upload_url,
+-      content_type:      file.type,
+-      size_bytes:        file.size,
+-      capture_ts:        nowIso,
+-      upload_ts:         nowIso,
+-      evidence_type:     evType,
+-      runbook_step_id:   stepId || null,
+-      sync_status:       'synced',
+-      azure_indexed:     false,
+-      approved_for_training: false,
+-    }).catch(() => {});
+-
+-    setPhase('done');
+-    toast.success('Evidence uploaded and manifest created');
+-    setTimeout(() => onSuccess?.(), 800);
++    setPhase('saving');
++    setErrorMessage('');
++    setManifestWarning(null);
++    setDoneSummary(null);
++
++    let record;
++    try {
++      const sha256 = await hashFile(file).catch(() => 'sha256-placeholder-' + uuidv4().slice(0, 8));
++      const token = await adapter.requestUploadToken(file, jobId, effectiveRunbookStepId);
++
++      const evidenceId = uuidv4();
++      const nowIso = new Date().toISOString();
++
++      const evidenceData = {
++        id: evidenceId,
++        job_id: jobId,
++        evidence_type: evType,
++        file_url: preview,
++        content_type: file.type,
++        size_bytes: file.size,
++        sha256,
++        captured_at: nowIso,
++        status: 'uploaded',
++        runbook_step_id: effectiveRunbookStepId ?? null,
++        notes: notes || undefined,
++        approved_for_training: false,
++      };
++
++      record = await adapter.completeUpload(token, evidenceData);
++
++      const persistedUrl = record?.file_url || preview;
++      const syncStatus = manifestSyncStatusFromToken(token);
++
++      let manifestFailed = false;
++      try {
++        await adapter.createManifestRow({
++          job_id: jobId,
++          evidence_id: record.id || evidenceId,
++          filename: file.name,
++          sha256,
++          file_url: persistedUrl,
++          azure_blob_url: record?.azure_blob_url || token.upload_url,
++          content_type: file.type,
++          size_bytes: file.size,
++          capture_ts: nowIso,
++          upload_ts: nowIso,
++          evidence_type: evType,
++          runbook_step_id: effectiveRunbookStepId ?? null,
++          sync_status: syncStatus,
++          azure_indexed: false,
++          approved_for_training: false,
++        });
++      } catch (manifestErr) {
++        manifestFailed = true;
++        const msg =
++          manifestErr instanceof Error ? manifestErr.message : 'Manifest row could not be created.';
++        setManifestWarning(msg);
++        toast.error('Evidence saved, but manifest log failed', { description: msg });
++      }
++
++      const storageNote = getStorageNoteForFileUrl(persistedUrl);
++      const detailLine =
++        [storageNote, syncStatus === 'pending' ? 'Remote blob sync is pending for this build.' : null]
++          .filter(Boolean)
++          .join(' ') || null;
++      setDoneSummary({
++        headline: 'Saved to this job',
++        detail: detailLine,
++      });
++
++      if (!manifestFailed) {
++        toast.success('Evidence saved to this job');
++      }
++
++      setPhase('done');
++      setTimeout(() => onSuccess?.(), 900);
++    } catch (err) {
++      const msg = err instanceof Error ? err.message : 'Save failed';
++      setErrorMessage(msg);
++      setPhase('error');
++      toast.error('Could not save evidence', { description: msg });
++    }
+   };
+ 
++  const headerTitle =
++    phase === 'select'
++      ? 'Add Evidence'
++      : phase === 'preview'
++        ? 'Review'
++        : phase === 'saving'
++          ? 'Saving…'
++          : phase === 'done'
++            ? 'Saved'
++            : phase === 'error'
++              ? 'Save failed'
++              : 'Add Evidence';
++
+   return (
+     <div className="fixed inset-0 z-50 flex items-end" role="dialog" aria-modal="true">
+       <div className="absolute inset-0 bg-black/60" onClick={onClose} />
+       <div className="relative w-full max-w-lg mx-auto bg-white rounded-t-3xl shadow-2xl pb-safe-area overflow-hidden">
+-        {/* Handle */}
+         <div className="flex justify-between items-center px-5 pt-5 pb-3">
+-          <h2 className="text-base font-black text-slate-900">
+-            {phase === 'select' ? 'Add Evidence' : phase === 'preview' ? 'Review' : phase === 'uploading' ? 'Uploading…' : 'Done!'}
+-          </h2>
+-          <button onClick={onClose} className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center">
++          <h2 className="text-base font-black text-slate-900">{headerTitle}</h2>
++          <button
++            type="button"
++            onClick={onClose}
++            className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center"
++          >
+             <X className="h-4 w-4 text-slate-600" />
+           </button>
+         </div>
+ 
+         <div className="px-5 pb-8 space-y-4">
+-          {/* SELECT */}
+           {phase === 'select' && (
+             <div className="space-y-3">
+-              <input ref={inputRef} type="file" accept="image/*,video/*,application/pdf" className="hidden"
+-                onChange={e => handleFile(e.target.files?.[0])} />
+-              <button onClick={() => { inputRef.current.setAttribute('capture','environment'); inputRef.current.click(); }}
+-                className="w-full h-16 rounded-xl bg-slate-900 text-white flex items-center justify-center gap-3 hover:bg-slate-800 active:scale-98 transition">
++              <input
++                ref={inputRef}
++                type="file"
++                accept="image/*,video/*,application/pdf"
++                className="hidden"
++                onChange={(e) => handleFile(e.target.files?.[0])}
++              />
++              <button
++                type="button"
++                onClick={() => {
++                  inputRef.current.setAttribute('capture', 'environment');
++                  inputRef.current.click();
++                }}
++                className="w-full h-16 rounded-xl bg-slate-900 text-white flex items-center justify-center gap-3 hover:bg-slate-800 active:scale-98 transition"
++              >
+                 <Camera className="h-6 w-6" />
+-                <div className="text-left"><p className="font-bold text-sm">Camera</p><p className="text-xs text-white/60">Capture photo or video</p></div>
++                <div className="text-left">
++                  <p className="font-bold text-sm">Camera</p>
++                  <p className="text-xs text-white/60">Capture photo or video</p>
++                </div>
+               </button>
+-              <button onClick={() => { inputRef.current.removeAttribute('capture'); inputRef.current.click(); }}
+-                className="w-full h-14 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center gap-3 hover:bg-slate-200 active:scale-98 transition">
++              <button
++                type="button"
++                onClick={() => {
++                  inputRef.current.removeAttribute('capture');
++                  inputRef.current.click();
++                }}
++                className="w-full h-14 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center gap-3 hover:bg-slate-200 active:scale-98 transition"
++              >
+                 <Images className="h-5 w-5 text-slate-500" />
+-                <div className="text-left"><p className="font-semibold text-sm">Gallery / File</p><p className="text-xs text-slate-400">Photo, video, or PDF</p></div>
++                <div className="text-left">
++                  <p className="font-semibold text-sm">Gallery / File</p>
++                  <p className="text-xs text-slate-400">Photo, video, or PDF</p>
++                </div>
+               </button>
+             </div>
+           )}
+ 
+-          {/* PREVIEW */}
+           {phase === 'preview' && (
+             <div className="space-y-3">
+               {preview && file?.type?.startsWith('image') && (
+                 <div className="relative rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center h-52">
+-                  <img src={preview} alt="preview"
++                  <img
++                    src={preview}
++                    alt="preview"
+                     className="h-full w-full object-contain transition-transform"
+-                    style={{ transform: `rotate(${rotation}deg)` }} />
+-                  <button onClick={() => setRotation(r => (r + 90) % 360)}
+-                    className="absolute bottom-2 right-2 h-8 w-8 rounded-full bg-black/40 text-white flex items-center justify-center backdrop-blur-sm">
++                    style={{ transform: `rotate(${rotation}deg)` }}
++                  />
++                  <button
++                    type="button"
++                    onClick={() => setRotation((r) => (r + 90) % 360)}
++                    className="absolute bottom-2 right-2 h-8 w-8 rounded-full bg-black/40 text-white flex items-center justify-center backdrop-blur-sm"
++                  >
+                     <RotateCw className="h-4 w-4" />
+                   </button>
+                 </div>
+@@ -158,60 +246,134 @@ export default function EvidenceCaptureModal({
+                 </div>
+               )}
+ 
+-              {/* Meta */}
+               <div>
+-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Evidence Type</label>
+-                <select value={evType} onChange={e => setEvType(e.target.value)}
+-                  className="w-full h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold px-3 focus:outline-none focus:ring-1 focus:ring-slate-400 capitalize">
+-                  {EVIDENCE_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g,' ')}</option>)}
++                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
++                  What is this evidence for?
++                </label>
++                <select
++                  value={evType}
++                  onChange={(e) => setEvType(e.target.value)}
++                  className="w-full h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold px-3 focus:outline-none focus:ring-1 focus:ring-slate-400 capitalize"
++                >
++                  {typeOptions.map((t) => (
++                    <option key={t.value} value={t.value}>
++                      {t.label}
++                    </option>
++                  ))}
+                 </select>
+               </div>
++
++              {runbookSteps.length > 0 && (
++                <div>
++                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
++                    Runbook step (optional)
++                  </label>
++                  <select
++                    value={selectedStepId}
++                    onChange={(e) => setSelectedStepId(e.target.value)}
++                    className="w-full h-9 rounded-lg border border-slate-200 bg-white text-xs font-semibold px-3 focus:outline-none focus:ring-1 focus:ring-slate-400"
++                  >
++                    <option value="">Job-level (no step)</option>
++                    {runbookSteps.map((s) => (
++                      <option key={s.id} value={s.id}>
++                        {s.phaseName ? `${s.phaseName} · ${s.title}` : s.title}
++                      </option>
++                    ))}
++                  </select>
++                </div>
++              )}
++
+               <div>
+-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Notes</label>
+-                <textarea value={notes} onChange={e => setNotes(e.target.value)} rows={2}
++                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">
++                  Notes
++                </label>
++                <textarea
++                  value={notes}
++                  onChange={(e) => setNotes(e.target.value)}
++                  rows={2}
+                   placeholder="Add context for this evidence…"
+-                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-slate-400" />
++                  className="w-full text-xs border border-slate-200 rounded-lg px-3 py-2 resize-none focus:outline-none focus:ring-1 focus:ring-slate-400"
++                />
+               </div>
+ 
+               <div className="flex gap-2">
+-                <button onClick={() => { setFile(null); setPreview(null); setPhase('select'); }}
+-                  className="flex-1 h-10 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50">
++                <button
++                  type="button"
++                  onClick={() => {
++                    setFile(null);
++                    setPreview(null);
++                    setPhase('select');
++                  }}
++                  className="flex-1 h-10 rounded-xl border border-slate-200 text-slate-600 text-sm font-semibold hover:bg-slate-50"
++                >
+                   Retake
+                 </button>
+-                <button onClick={handleUpload}
+-                  className="flex-1 h-10 rounded-xl bg-slate-900 text-white text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-700">
+-                  <Upload className="h-4 w-4" /> Upload
++                <button
++                  type="button"
++                  onClick={handleSave}
++                  className="flex-1 h-10 rounded-xl bg-slate-900 text-white text-sm font-bold flex items-center justify-center gap-2 hover:bg-slate-700"
++                >
++                  <Upload className="h-4 w-4" /> Save to job
+                 </button>
+               </div>
+             </div>
+           )}
+ 
+-          {/* UPLOADING */}
+-          {phase === 'uploading' && (
+-            <div className="py-6 flex flex-col items-center gap-4">
+-              <div className="relative h-16 w-16">
+-                <Loader2 className="h-16 w-16 text-slate-200 animate-spin" />
+-                <span className="absolute inset-0 flex items-center justify-center text-xs font-black text-slate-700">{progress}%</span>
+-              </div>
+-              <div className="w-full bg-slate-100 rounded-full h-2 overflow-hidden">
+-                <div className="h-full bg-blue-500 rounded-full transition-all" style={{ width: `${progress}%` }} />
+-              </div>
+-              <p className="text-xs text-slate-400">Creating manifest row…</p>
++          {phase === 'saving' && (
++            <div className="py-8 flex flex-col items-center gap-4">
++              <Loader2 className="h-12 w-12 text-slate-300 animate-spin" />
++              <p className="text-sm font-semibold text-slate-800">Saving evidence…</p>
++              <p className="text-xs text-slate-500 text-center max-w-xs">
++                Creating the evidence record on the server. Blob upload is simulated in this build when storage is not
++                wired to Azure.
++              </p>
+             </div>
+           )}
+ 
+-          {/* DONE */}
+           {phase === 'done' && (
+-            <div className="py-8 flex flex-col items-center gap-3">
++            <div className="py-8 flex flex-col items-center gap-3 px-2">
+               <div className="h-14 w-14 rounded-full bg-emerald-50 flex items-center justify-center">
+                 <CheckCircle2 className="h-8 w-8 text-emerald-500" />
+               </div>
+-              <p className="font-black text-slate-900">Uploaded successfully</p>
+-              <p className="text-xs text-slate-400">Evidence record and manifest row created.</p>
++              <p className="font-black text-slate-900 text-center">{doneSummary?.headline || 'Saved to this job'}</p>
++              {doneSummary?.detail && (
++                <p className="text-xs text-slate-500 text-center leading-relaxed">{doneSummary.detail}</p>
++              )}
++              {manifestWarning && (
++                <p className="text-xs text-amber-700 text-center leading-relaxed">
++                  Manifest log failed — evidence row should still appear after refresh.
++                </p>
++              )}
++            </div>
++          )}
++
++          {phase === 'error' && (
++            <div className="py-6 flex flex-col items-center gap-4">
++              <div className="h-14 w-14 rounded-full bg-red-50 flex items-center justify-center">
++                <AlertCircle className="h-8 w-8 text-red-500" />
++              </div>
++              <p className="text-sm font-semibold text-slate-900 text-center">Could not save</p>
++              <p className="text-xs text-slate-600 text-center max-w-sm">{errorMessage}</p>
++              <div className="flex gap-2 w-full">
++                <button
++                  type="button"
++                  onClick={() => setPhase('preview')}
++                  className="flex-1 h-10 rounded-xl border border-slate-200 text-slate-700 text-sm font-semibold hover:bg-slate-50"
++                >
++                  Back
++                </button>
++                <button
++                  type="button"
++                  onClick={onClose}
++                  className="flex-1 h-10 rounded-xl bg-slate-100 text-slate-700 text-sm font-semibold"
++                >
++                  Close
++                </button>
++              </div>
+             </div>
+           )}
+         </div>
+       </div>
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/components/fieldv2/EvidenceGalleryView.jsx b/src/components/fieldv2/EvidenceGalleryView.jsx
+index ecaad78..0e657c1 100644
+--- a/src/components/fieldv2/EvidenceGalleryView.jsx
++++ b/src/components/fieldv2/EvidenceGalleryView.jsx
+@@ -1,42 +1,146 @@
+ /**
+  * EvidenceGalleryView — Evidence tab (E)
+- * Grid of thumbnails with metadata overlay, detail modal, QC actions, labeler.
++ * Completeness-first: requirements vs uploaded, honest per-item status, capture with mapping.
+  */
+ import React, { useState } from 'react';
+ import { useMutation, useQueryClient } from '@tanstack/react-query';
+ import { base44 } from '@/api/base44Client';
+-import { Plus, X, MapPin, Tag, CheckCircle2, XCircle, FileText, Layers } from 'lucide-react';
++import { Plus, X, MapPin, Tag, CheckCircle2, XCircle, FileText, Layers, Circle } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+ import { format, parseISO } from 'date-fns';
+ import EvidenceCaptureModal from './EvidenceCaptureModal';
+ import LabelerModal from './LabelerModal';
++import {
++  assignEvidenceToRequirements,
++  getEvidenceStatusPresentation,
++  groupEvidenceByStepOrJob,
++  partitionEvidenceForRequirements,
++  resolveRunbookStepTitle,
++  getStorageNoteForFileUrl,
++} from '@/lib/fieldEvidenceViewModel';
+ 
+ const QC_CFG = {
+-  pass:    { bg: 'bg-emerald-500', label: 'Pass' },
+-  fail:    { bg: 'bg-red-500',     label: 'Fail' },
+-  unknown: { bg: 'bg-slate-400',   label: '—'    },
++  pass: { bg: 'bg-emerald-500', label: 'Pass' },
++  fail: { bg: 'bg-red-500', label: 'Fail' },
++  unknown: { bg: 'bg-slate-400', label: '—' },
+ };
+ 
+-function fmtTs(ts) { try { return format(parseISO(ts), 'MMM d HH:mm'); } catch { return ts || '—'; } }
++function fmtTs(ts) {
++  try {
++    return format(parseISO(ts), 'MMM d HH:mm');
++  } catch {
++    return ts || '—';
++  }
++}
++
++function EvidenceRequirementsPanel({ job, evidence, onAddForRequirement }) {
++  const reqs = job?.evidence_requirements;
++  const rows = partitionEvidenceForRequirements(job, evidence);
++
++  if (!Array.isArray(reqs) || reqs.length === 0) {
++    return (
++      <p className="text-xs text-slate-500 mb-4 leading-relaxed">
++        No structured evidence requirements are configured for this work order yet. Each item you add is still labeled
++        by type and optional runbook step so it stays traceable.
++      </p>
++    );
++  }
+ 
+-function Thumbnail({ ev, onClick }) {
++  return (
++    <div className="bg-white rounded-xl border border-slate-100 p-4 mb-4">
++      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-3">
++        Required vs uploaded
++      </p>
++      <ul className="space-y-2">
++        {rows.map(({ req, min, uploaded, inFlight, met, unmet }, i) => (
++          <li
++            key={i}
++            className={cn(
++              'flex flex-col gap-2 rounded-lg px-3 py-2.5 border text-xs',
++              met ? 'bg-emerald-50 border-emerald-100 text-emerald-900' : 'bg-amber-50/80 border-amber-100 text-amber-950',
++            )}
++          >
++            <div className="flex items-center justify-between gap-3">
++              <span className="flex items-center gap-2 font-semibold min-w-0">
++                {met ? (
++                  <CheckCircle2 className="h-4 w-4 text-emerald-600 flex-shrink-0" aria-hidden />
++                ) : (
++                  <Circle className="h-4 w-4 text-amber-500 flex-shrink-0" aria-hidden />
++                )}
++                <span className="truncate capitalize">{req.label || req.type?.replace(/_/g, ' ')}</span>
++              </span>
++              <span className="font-mono tabular-nums text-[11px] font-bold flex-shrink-0">
++                {uploaded}/{min}
++              </span>
++            </div>
++            <div className="flex items-center justify-between gap-2 pl-6">
++              <span className="text-[10px] text-slate-600">
++                {inFlight > 0 && (
++                  <span className="font-semibold text-amber-800">{inFlight} not finished (upload/sync) · </span>
++                )}
++                {!met && <span className="text-amber-900 font-medium">{unmet} more needed</span>}
++                {met && inFlight === 0 && <span className="text-emerald-800">Requirement met</span>}
++              </span>
++              <button
++                type="button"
++                onClick={() => onAddForRequirement?.(req.type)}
++                className="h-7 px-2.5 rounded-lg bg-slate-900 text-white text-[10px] font-bold hover:bg-slate-700 flex-shrink-0"
++              >
++                Add
++              </button>
++            </div>
++          </li>
++        ))}
++      </ul>
++    </div>
++  );
++}
++
++function Thumbnail({ ev, job, onClick }) {
+   const isImg = ev.content_type?.startsWith('image');
+-  const qc    = QC_CFG[ev.qc_status] || QC_CFG.unknown;
++  const qc = QC_CFG[ev.qc_status] || QC_CFG.unknown;
++  const st = getEvidenceStatusPresentation(ev);
++  const stepTitle = resolveRunbookStepTitle(job, ev.runbook_step_id);
++
+   return (
+-    <button onClick={() => onClick(ev)}
+-      className="relative rounded-xl overflow-hidden bg-slate-100 border border-slate-200 hover:border-slate-400 transition-all aspect-square flex items-center justify-center">
+-      {isImg
+-        ? <img src={ev.file_url || ev.thumbnail_url} alt="evidence" className="h-full w-full object-cover" />
+-        : <FileText className="h-8 w-8 text-slate-400" />}
+-      {/* QC dot */}
+-      <span className={cn('absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full border-2 border-white', qc.bg)} title={qc.label} />
+-      {/* Step tag */}
++    <button
++      type="button"
++      onClick={() => onClick(ev)}
++      className="relative rounded-xl overflow-hidden bg-slate-100 border border-slate-200 hover:border-slate-400 transition-all aspect-square flex items-center justify-center"
++    >
++      {isImg ? (
++        <img src={ev.file_url || ev.thumbnail_url} alt="evidence" className="h-full w-full object-cover" />
++      ) : (
++        <FileText className="h-8 w-8 text-slate-400" />
++      )}
++      <span
++        className={cn('absolute top-1.5 right-1.5 h-2.5 w-2.5 rounded-full border-2 border-white', qc.bg)}
++        title={`QC: ${qc.label}`}
++      />
++      {st.tone !== 'ok' && (
++        <span
++          className={cn(
++            'absolute top-1.5 left-1.5 max-w-[85%] truncate rounded px-1 py-0.5 text-[8px] font-bold text-white shadow-sm',
++            st.tone === 'error' ? 'bg-red-600' : st.tone === 'pending' ? 'bg-amber-600' : 'bg-slate-600',
++          )}
++          title={st.label}
++        >
++          {st.shortLabel}
++        </span>
++      )}
+       {ev.runbook_step_id && (
+-        <span className="absolute bottom-1 left-1 bg-black/50 text-white text-[9px] font-bold px-1 rounded">
+-          {ev.runbook_step_id}
++        <span
++          className="absolute bottom-1 left-1 bg-black/55 text-white text-[8px] font-bold px-1 rounded max-w-[90%] truncate"
++          title={ev.runbook_step_id}
++        >
++          {stepTitle || ev.runbook_step_id}
++        </span>
++      )}
++      {ev.geo_lat && (
++        <span className="absolute bottom-1 right-1 text-white">
++          <MapPin className="h-2.5 w-2.5 drop-shadow" />
+         </span>
+       )}
+-      {ev.geo_lat && <span className="absolute bottom-1 right-1 text-white"><MapPin className="h-2.5 w-2.5 drop-shadow" /></span>}
+     </button>
+   );
+ }
+@@ -45,31 +149,43 @@ function ExifRow({ label, value }) {
+   if (!value && value !== 0) return null;
+   return (
+     <tr className="border-b border-slate-50">
+-      <td className="py-1.5 pr-3 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">{label}</td>
++      <td className="py-1.5 pr-3 text-[10px] font-black text-slate-400 uppercase tracking-widest whitespace-nowrap">
++        {label}
++      </td>
+       <td className="py-1.5 text-xs text-slate-700 font-mono">{String(value)}</td>
+     </tr>
+   );
+ }
+ 
+-function DetailModal({ ev, onClose, onLabel, onQC }) {
++function DetailModal({ ev, job, onClose, onLabel, onQC }) {
+   const exif = ev.exif_metadata || {};
+   const hasGeo = ev.geo_lat != null;
+   const isImg = ev.content_type?.startsWith('image');
+   const qc = QC_CFG[ev.qc_status] || QC_CFG.unknown;
++  const st = getEvidenceStatusPresentation(ev);
++  const stepTitle = resolveRunbookStepTitle(job, ev.runbook_step_id);
++  const storageNote = getStorageNoteForFileUrl(ev.file_url);
+ 
+   return (
+-    <div className="fixed inset-0 z-50 flex items-end md:items-center md:justify-center" role="dialog" aria-modal="true">
++    <div
++      className="fixed inset-0 z-50 flex items-end md:items-center md:justify-center"
++      role="dialog"
++      aria-modal="true"
++    >
+       <div className="absolute inset-0 bg-black/70" onClick={onClose} />
+       <div className="relative w-full max-w-lg bg-white rounded-t-3xl md:rounded-2xl shadow-2xl max-h-[92vh] overflow-y-auto">
+         <div className="flex items-center justify-between px-5 pt-5 pb-3 sticky top-0 bg-white border-b border-slate-50 z-10">
+           <h2 className="text-sm font-black text-slate-900 truncate flex-1">Evidence Detail</h2>
+-          <button onClick={onClose} className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 ml-2">
++          <button
++            type="button"
++            onClick={onClose}
++            className="h-8 w-8 rounded-full bg-slate-100 flex items-center justify-center flex-shrink-0 ml-2"
++          >
+             <X className="h-4 w-4 text-slate-600" />
+           </button>
+         </div>
+ 
+         <div className="px-5 pb-10 space-y-4 mt-3">
+-          {/* Full-size image */}
+           {isImg && (
+             <div className="rounded-xl overflow-hidden bg-slate-100 flex items-center justify-center max-h-64">
+               <img src={ev.file_url} alt="evidence" className="max-h-64 w-full object-contain" />
+@@ -81,56 +197,99 @@ function DetailModal({ ev, onClose, onLabel, onQC }) {
+             </div>
+           )}
+ 
+-          {/* QC Status + actions */}
+-          <div className="flex items-center gap-3">
++          <div className="flex items-center gap-3 flex-wrap">
+             <div className={cn('flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white', qc.bg)}>
+-              {qc.label === 'Pass' ? <CheckCircle2 className="h-3.5 w-3.5" /> : qc.label === 'Fail' ? <XCircle className="h-3.5 w-3.5" /> : <Layers className="h-3.5 w-3.5" />}
++              {qc.label === 'Pass' ? (
++                <CheckCircle2 className="h-3.5 w-3.5" />
++              ) : qc.label === 'Fail' ? (
++                <XCircle className="h-3.5 w-3.5" />
++              ) : (
++                <Layers className="h-3.5 w-3.5" />
++              )}
+               QC: {qc.label}
+             </div>
+-            <button onClick={() => onQC(ev, 'pass')}
+-              className="h-8 px-3 rounded-[8px] bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 flex items-center gap-1">
++            <div
++              className={cn(
++                'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border',
++                st.tone === 'ok' && 'bg-emerald-50 border-emerald-200 text-emerald-900',
++                st.tone === 'pending' && 'bg-amber-50 border-amber-200 text-amber-950',
++                st.tone === 'error' && 'bg-red-50 border-red-200 text-red-900',
++                st.tone === 'muted' && 'bg-slate-50 border-slate-200 text-slate-700',
++              )}
++            >
++              Record: {st.shortLabel}
++            </div>
++          </div>
++
++          <div className="flex items-center gap-3 flex-wrap">
++            <button
++              type="button"
++              onClick={() => onQC(ev, 'pass')}
++              className="h-8 px-3 rounded-[8px] bg-emerald-50 text-emerald-700 text-xs font-bold hover:bg-emerald-100 flex items-center gap-1"
++            >
+               <CheckCircle2 className="h-3.5 w-3.5" /> Pass
+             </button>
+-            <button onClick={() => onQC(ev, 'fail')}
+-              className="h-8 px-3 rounded-[8px] bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 flex items-center gap-1">
++            <button
++              type="button"
++              onClick={() => onQC(ev, 'fail')}
++              className="h-8 px-3 rounded-[8px] bg-red-50 text-red-700 text-xs font-bold hover:bg-red-100 flex items-center gap-1"
++            >
+               <XCircle className="h-3.5 w-3.5" /> Fail
+             </button>
+-            <button onClick={() => onLabel(ev)}
+-              className="h-8 px-3 rounded-[8px] bg-slate-900 text-white text-xs font-bold hover:bg-slate-700 flex items-center gap-1 ml-auto">
++            <button
++              type="button"
++              onClick={() => onLabel(ev)}
++              className="h-8 px-3 rounded-[8px] bg-slate-900 text-white text-xs font-bold hover:bg-slate-700 flex items-center gap-1 ml-auto"
++            >
+               <Tag className="h-3.5 w-3.5" /> Label
+             </button>
+           </div>
+ 
+-          {/* Metadata */}
++          {storageNote && (
++            <p className="text-xs text-slate-600 bg-slate-50 border border-slate-100 rounded-lg px-3 py-2 leading-relaxed">
++              {storageNote}
++            </p>
++          )}
++
+           <div>
+             <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Metadata</p>
+             <table className="w-full">
+               <tbody>
+-                <ExifRow label="Type"       value={ev.evidence_type} />
+-                <ExifRow label="Captured"   value={fmtTs(ev.captured_at)} />
+-                <ExifRow label="Size"       value={ev.size_bytes ? `${(ev.size_bytes/1024).toFixed(0)} KB` : null} />
+-                <ExifRow label="MIME"       value={ev.content_type} />
+-                <ExifRow label="Step"       value={ev.runbook_step_id} />
+-                <ExifRow label="SHA-256"    value={ev.sha256 ? ev.sha256.slice(0,20) + '…' : null} />
+-                {hasGeo && <ExifRow label="Latitude"  value={ev.geo_lat?.toFixed(5)} />}
++                <ExifRow label="Type" value={ev.evidence_type} />
++                <ExifRow label="Upload / sync" value={st.label} />
++                <ExifRow label="Captured" value={fmtTs(ev.captured_at)} />
++                <ExifRow label="Size" value={ev.size_bytes ? `${(ev.size_bytes / 1024).toFixed(0)} KB` : null} />
++                <ExifRow label="MIME" value={ev.content_type} />
++                <ExifRow label="Step" value={stepTitle || ev.runbook_step_id || null} />
++                <ExifRow label="SHA-256" value={ev.sha256 ? ev.sha256.slice(0, 20) + '…' : null} />
++                {hasGeo && <ExifRow label="Latitude" value={ev.geo_lat?.toFixed(5)} />}
+                 {hasGeo && <ExifRow label="Longitude" value={ev.geo_lon?.toFixed(5)} />}
+-                {hasGeo && <ExifRow label="Altitude"  value={ev.geo_altitude_m != null ? `${ev.geo_altitude_m} m` : null} />}
+-                {hasGeo && <ExifRow label="Accuracy"  value={ev.geo_accuracy_m != null ? `±${ev.geo_accuracy_m} m` : null} />}
+-                {exif.make  && <ExifRow label="Camera" value={`${exif.make} ${exif.model}`} />}
+-                {exif.iso   && <ExifRow label="ISO"    value={exif.iso} />}
+-                {exif.focal_mm && <ExifRow label="Focal"  value={`${exif.focal_mm} mm`} />}
+-                {exif.exposure_s && <ExifRow label="Exposure" value={`1/${Math.round(1/exif.exposure_s)}s`} />}
+-                {exif.width_px  && <ExifRow label="Resolution" value={`${exif.width_px}×${exif.height_px}`} />}
++                {hasGeo && (
++                  <ExifRow label="Altitude" value={ev.geo_altitude_m != null ? `${ev.geo_altitude_m} m` : null} />
++                )}
++                {hasGeo && (
++                  <ExifRow label="Accuracy" value={ev.geo_accuracy_m != null ? `±${ev.geo_accuracy_m} m` : null} />
++                )}
++                {exif.make && <ExifRow label="Camera" value={`${exif.make} ${exif.model}`} />}
++                {exif.iso && <ExifRow label="ISO" value={exif.iso} />}
++                {exif.focal_mm && <ExifRow label="Focal" value={`${exif.focal_mm} mm`} />}
++                {exif.exposure_s && <ExifRow label="Exposure" value={`1/${Math.round(1 / exif.exposure_s)}s`} />}
++                {exif.width_px && (
++                  <ExifRow label="Resolution" value={`${exif.width_px}×${exif.height_px}`} />
++                )}
+               </tbody>
+             </table>
+           </div>
+ 
+-          {/* Map marker */}
+           {hasGeo && (
+             <div>
+               <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">Location</p>
+-              <a href={`https://maps.google.com/?q=${ev.geo_lat},${ev.geo_lon}`} target="_blank" rel="noopener noreferrer"
+-                className="flex items-center gap-2 h-9 px-3 rounded-[8px] bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100">
++              <a
++                href={`https://maps.google.com/?q=${ev.geo_lat},${ev.geo_lon}`}
++                target="_blank"
++                rel="noopener noreferrer"
++                className="flex items-center gap-2 h-9 px-3 rounded-[8px] bg-blue-50 text-blue-700 text-xs font-bold hover:bg-blue-100"
++              >
+                 <MapPin className="h-3.5 w-3.5" />
+                 {ev.geo_lat?.toFixed(5)}, {ev.geo_lon?.toFixed(5)} — Open in Maps
+               </a>
+@@ -149,15 +308,34 @@ function DetailModal({ ev, onClose, onLabel, onQC }) {
+   );
+ }
+ 
+-export default function EvidenceGalleryView({ job, evidence, labels, adapters, onRefresh }) {
+-  const [showCapture,  setShowCapture]  = useState(false);
+-  const [selectedEv,   setSelectedEv]   = useState(null);
+-  const [labelerTarget,setLabelerTarget] = useState(null);
++function RunbookStepSummary({ job, evidence }) {
++  const { stepGroups, jobLevel } = groupEvidenceByStepOrJob(job, evidence);
++  if (stepGroups.length === 0 && jobLevel.length === 0) return null;
++  const parts = stepGroups.map((g) => `${g.title} · ${g.items.length}`);
++  if (jobLevel.length > 0) parts.unshift(`Job-level · ${jobLevel.length}`);
++  if (parts.length === 0) return null;
++  return (
++    <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2 mb-3">
++      <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">By runbook link</p>
++      <p className="text-[11px] text-slate-600 leading-snug">{parts.join(' · ')}</p>
++    </div>
++  );
++}
++
++export default function EvidenceGalleryView({ job, evidence, labels: _labels, adapters, onRefresh }) {
++  const [showCapture, setShowCapture] = useState(false);
++  const [captureFocus, setCaptureFocus] = useState({ evidenceType: null, stepId: null });
++  const [captureNonce, setCaptureNonce] = useState(0);
++  const [selectedEv, setSelectedEv] = useState(null);
++  const [labelerTarget, setLabelerTarget] = useState(null);
+   const qc = useQueryClient();
+ 
+   const qcMutation = useMutation({
+     mutationFn: ({ id, verdict }) => base44.entities.Evidence.update(id, { qc_status: verdict }),
+-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['fj-evidence', job.id] }); onRefresh?.(); },
++    onSuccess: () => {
++      qc.invalidateQueries({ queryKey: ['fj-evidence', job.id] });
++      onRefresh?.();
++    },
+   });
+ 
+   const handleQC = (ev, verdict) => {
+@@ -170,50 +348,111 @@ export default function EvidenceGalleryView({ job, evidence, labels, adapters, o
+     setLabelerTarget(ev);
+   };
+ 
+-  const typeGroups = {};
+-  evidence.forEach(e => {
+-    const t = e.evidence_type || 'general';
+-    if (!typeGroups[t]) typeGroups[t] = [];
+-    typeGroups[t].push(e);
+-  });
++  const openCapture = (opts = {}) => {
++    setCaptureFocus({ evidenceType: opts.evidenceType ?? null, stepId: opts.stepId ?? null });
++    setCaptureNonce((n) => n + 1);
++    setShowCapture(true);
++  };
++
++  const hasReqs = Array.isArray(job?.evidence_requirements) && job.evidence_requirements.length > 0;
++  const { rows: reqRows, other } = assignEvidenceToRequirements(job, evidence);
++
++  const gallerySections = hasReqs
++    ? [
++        ...reqRows.map(({ req, items }) => ({
++          key: `req-${req.type}`,
++          title: (req.label || req.type || '').replace(/_/g, ' '),
++          subtitle: `${items.length} attached`,
++          items,
++        })),
++        ...(other.length > 0
++          ? [{ key: 'other', title: 'Other evidence', subtitle: `${other.length} items`, items: other }]
++          : []),
++      ]
++    : Object.entries(
++        evidence.reduce((acc, e) => {
++          const t = e.evidence_type || 'general';
++          if (!acc[t]) acc[t] = [];
++          acc[t].push(e);
++          return acc;
++        }, {}),
++      ).map(([type, items]) => ({
++        key: `type-${type}`,
++        title: type.replace(/_/g, ' '),
++        subtitle: `${items.length}`,
++        items,
++      }));
+ 
+   return (
+     <div className="space-y-4">
+-      {/* Add Evidence */}
+-      <button onClick={() => setShowCapture(true)}
+-        className="w-full h-11 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 text-sm font-semibold flex items-center justify-center gap-2 hover:border-slate-500 hover:text-slate-700 transition-colors">
++      <div>
++        <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">Evidence for this job</p>
++        <EvidenceRequirementsPanel job={job} evidence={evidence} onAddForRequirement={(type) => openCapture({ evidenceType: type })} />
++        <RunbookStepSummary job={job} evidence={evidence} />
++      </div>
++
++      <button
++        type="button"
++        onClick={() => openCapture({})}
++        className="w-full h-11 rounded-xl border-2 border-dashed border-slate-300 text-slate-500 text-sm font-semibold flex items-center justify-center gap-2 hover:border-slate-500 hover:text-slate-700 transition-colors"
++      >
+         <Plus className="h-4 w-4" /> Add Evidence
+       </button>
+ 
+-      {/* Gallery by type */}
+-      {Object.entries(typeGroups).map(([type, items]) => (
+-        <div key={type}>
++      {!hasReqs && evidence.length > 0 && (
++        <p className="text-[11px] text-slate-500">
++          Showing items by evidence type. Link items to runbook steps when you capture (if this job has embedded
++          steps).
++        </p>
++      )}
++
++      {gallerySections.map((section) => (
++        <div key={section.key}>
+           <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2 capitalize">
+-            {type.replace(/_/g,' ')} <span className="font-normal text-slate-300">({items.length})</span>
++            {section.title}{' '}
++            <span className="font-normal text-slate-300 normal-case">({section.subtitle})</span>
+           </p>
+-          <div className="grid grid-cols-3 gap-2">
+-            {items.map(ev => (
+-              <Thumbnail key={ev.id} ev={ev} onClick={setSelectedEv} />
+-            ))}
+-          </div>
++          {section.items.length === 0 ? (
++            <p className="text-xs text-slate-400 py-2 pl-0.5">No items in this bucket yet.</p>
++          ) : (
++            <div className="grid grid-cols-3 gap-2">
++              {section.items.map((ev) => (
++                <Thumbnail key={ev.id} ev={ev} job={job} onClick={setSelectedEv} />
++              ))}
++            </div>
++          )}
+         </div>
+       ))}
+ 
+       {evidence.length === 0 && (
+-        <div className="py-16 text-center text-slate-400 text-sm">No evidence yet — tap Add Evidence to start.</div>
++        <div className="py-16 text-center text-slate-400 text-sm">
++          No evidence yet — tap Add Evidence to choose type and optional runbook step.
++        </div>
+       )}
+ 
+-      {/* Modals */}
+       {showCapture && (
+         <EvidenceCaptureModal
++          key={captureNonce}
+           jobId={job.id}
++          job={job}
++          initialEvidenceType={captureFocus.evidenceType}
++          initialRunbookStepId={captureFocus.stepId}
+           adapter={adapters?.upload}
+           onClose={() => setShowCapture(false)}
+-          onSuccess={() => { setShowCapture(false); onRefresh?.(); }}
++          onSuccess={() => {
++            setShowCapture(false);
++            onRefresh?.();
++          }}
+         />
+       )}
+       {selectedEv && (
+-        <DetailModal ev={selectedEv} onClose={() => setSelectedEv(null)} onLabel={handleLabel} onQC={handleQC} />
++        <DetailModal
++          ev={selectedEv}
++          job={job}
++          onClose={() => setSelectedEv(null)}
++          onLabel={handleLabel}
++          onQC={handleQC}
++        />
+       )}
+       {labelerTarget && (
+         <LabelerModal
+@@ -221,9 +460,12 @@ export default function EvidenceGalleryView({ job, evidence, labels, adapters, o
+           jobId={job.id}
+           adapter={adapters?.label}
+           onClose={() => setLabelerTarget(null)}
+-          onSuccess={() => { setLabelerTarget(null); onRefresh?.(); }}
++          onSuccess={() => {
++            setLabelerTarget(null);
++            onRefresh?.();
++          }}
+         />
+       )}
+     </div>
+   );
+-}
+\ No newline at end of file
++}
+diff --git a/src/components/fieldv2/RunbookSteps.jsx b/src/components/fieldv2/RunbookSteps.jsx
+index f1ac12a..a4c3c8f 100644
+--- a/src/components/fieldv2/RunbookSteps.jsx
++++ b/src/components/fieldv2/RunbookSteps.jsx
+@@ -212,6 +212,7 @@ function RunbookStep({ step, job, jobId, runbookPhaseMeta, evidence, adapters, o
+     {showCapture && (
+       <EvidenceCaptureModal
+         jobId={jobId}
++        job={job}
+         stepId={step.id}
+         adapter={adapters?.upload}
+         onClose={() => setShowCapture(false)}
+diff --git a/src/lib/fieldAdapters.js b/src/lib/fieldAdapters.js
+index 09328af..0a7430b 100644
+--- a/src/lib/fieldAdapters.js
++++ b/src/lib/fieldAdapters.js
+@@ -128,11 +128,14 @@ export class Base44UploadAdapter {
+    */
+   async requestUploadToken(file, jobId, stepId) {
+     await new Promise(r => setTimeout(r, 250)); // simulate network RTT
++    const upload_url = `mock://purpulse-blob/evidence-prod/${jobId}/${encodeURIComponent(file.name)}`;
+     return {
+       token:      crypto.randomUUID?.() || Math.random().toString(36).slice(2),
+-      upload_url: `mock://purpulse-blob/evidence-prod/${jobId}/${encodeURIComponent(file.name)}`,
++      upload_url,
+       expires_at: new Date(Date.now() + 3_600_000).toISOString(),
+       storage_backend: localStorage.getItem('purpulse_storage_backend') || 'base44',
++      /** True when no real blob upload is performed (field honesty / manifest sync). */
++      is_simulated_storage: upload_url.startsWith('mock://'),
+     };
+   }
+ 
+diff --git a/src/lib/fieldEvidenceViewModel.ts b/src/lib/fieldEvidenceViewModel.ts
+new file mode 100644
+index 0000000..0771ad0
+--- /dev/null
++++ b/src/lib/fieldEvidenceViewModel.ts
+@@ -0,0 +1,242 @@
++/**
++ * Pure helpers for field-v2 evidence completeness, grouping, and honest status copy.
++ * Does not invent backend fields — only projects what the job + evidence already provide.
++ */
++
++export const FALLBACK_EVIDENCE_TYPES = [
++  'before_photo',
++  'after_photo',
++  'equipment_label',
++  'site_photo',
++  'general',
++] as const
++
++export type EvidenceStatus = 'pending_upload' | 'uploading' | 'uploaded' | 'error' | 'replaced'
++
++export type EvidenceLike = {
++  id: string
++  evidence_type?: string
++  status?: EvidenceStatus | string
++  file_url?: string
++  runbook_step_id?: string
++  upload_error?: string
++}
++
++export type EvidenceRequirementLike = {
++  type: string
++  label?: string
++  min_count?: number
++}
++
++export type RunbookStepRef = { id: string; title: string; phaseName?: string }
++
++/** Walk embedded job runbook phases (steps or tasks) for capture / labels. */
++export function flattenRunbookSteps(job: {
++  runbook_phases?: Array<{
++    name?: string
++    steps?: Array<{ id: string; name?: string; title?: string }>
++    tasks?: Array<{ id: string; name?: string; title?: string }>
++  }>
++} | null | undefined): RunbookStepRef[] {
++  const phases = job?.runbook_phases
++  if (!Array.isArray(phases)) return []
++  const out: RunbookStepRef[] = []
++  for (const phase of phases) {
++    const phaseName = phase?.name
++    const list = phase?.steps ?? phase?.tasks ?? []
++    for (const step of list) {
++      if (!step?.id) continue
++      const title = step.name || step.title || step.id
++      out.push({ id: step.id, title, phaseName })
++    }
++  }
++  return out
++}
++
++export function resolveRunbookStepTitle(job: Parameters<typeof flattenRunbookSteps>[0], stepId: string | null | undefined): string | null {
++  if (!stepId) return null
++  const hit = flattenRunbookSteps(job).find((s) => s.id === stepId)
++  return hit?.title ?? stepId
++}
++
++/** Ordered evidence types: job requirements first, then fallbacks not already listed. */
++export function buildEvidenceTypeOptions(job: {
++  evidence_requirements?: EvidenceRequirementLike[]
++} | null | undefined): { value: string; label: string }[] {
++  const reqs = job?.evidence_requirements
++  const fromReq: { value: string; label: string }[] = []
++  const seen = new Set<string>()
++  if (Array.isArray(reqs)) {
++    for (const r of reqs) {
++      if (!r?.type || seen.has(r.type)) continue
++      seen.add(r.type)
++      fromReq.push({
++        value: r.type,
++        label: r.label || r.type.replace(/_/g, ' '),
++      })
++    }
++  }
++  for (const t of FALLBACK_EVIDENCE_TYPES) {
++    if (seen.has(t)) continue
++    seen.add(t)
++    fromReq.push({ value: t, label: t.replace(/_/g, ' ') })
++  }
++  return fromReq
++}
++
++export function getEvidenceStatusPresentation(ev: EvidenceLike): {
++  label: string
++  shortLabel: string
++  tone: 'ok' | 'pending' | 'error' | 'muted'
++} {
++  const status = ev.status as EvidenceStatus | undefined
++  const err = ev.upload_error?.trim()
++
++  if (status === 'error') {
++    return {
++      label: err ? `Failed — ${err}` : 'Failed',
++      shortLabel: 'Failed',
++      tone: 'error',
++    }
++  }
++  if (status === 'pending_upload') {
++    return { label: 'Pending upload', shortLabel: 'Pending', tone: 'pending' }
++  }
++  if (status === 'uploading') {
++    return { label: 'Uploading', shortLabel: 'Uploading', tone: 'pending' }
++  }
++  if (status === 'replaced') {
++    return { label: 'Replaced', shortLabel: 'Replaced', tone: 'muted' }
++  }
++  if (status === 'uploaded') {
++    const url = ev.file_url || ''
++    if (url.startsWith('data:')) {
++      return {
++        label: 'Saved — inline preview (not blob storage)',
++        shortLabel: 'Inline',
++        tone: 'pending',
++      }
++    }
++    if (url.startsWith('mock://')) {
++      return {
++        label: 'Saved — simulated storage URL',
++        shortLabel: 'Simulated',
++        tone: 'pending',
++      }
++    }
++    return { label: 'Available', shortLabel: 'Saved', tone: 'ok' }
++  }
++  return { label: status || 'Unknown', shortLabel: status || '—', tone: 'muted' }
++}
++
++export function getStorageNoteForFileUrl(fileUrl: string | null | undefined): string | null {
++  if (!fileUrl) return null
++  if (fileUrl.startsWith('data:')) {
++    return 'This file is stored as an inline preview on the evidence record, not as a separate blob URL.'
++  }
++  if (fileUrl.startsWith('mock://')) {
++    return 'This record points at a simulated storage URL; remote blob sync is not active for this build.'
++  }
++  return null
++}
++
++export type RequirementPartitionRow = {
++  req: EvidenceRequirementLike
++  min: number
++  uploaded: number
++  inFlight: number
++  met: boolean
++  unmet: number
++}
++
++export function partitionEvidenceForRequirements(
++  job: { evidence_requirements?: EvidenceRequirementLike[] } | null | undefined,
++  evidence: EvidenceLike[],
++): RequirementPartitionRow[] {
++  const reqs = job?.evidence_requirements
++  if (!Array.isArray(reqs) || reqs.length === 0) return []
++  return reqs.map((req) => {
++    const min = req.min_count ?? 1
++    const matching = evidence.filter((e) => e.evidence_type === req.type)
++    const uploaded = matching.filter((e) => e.status === 'uploaded').length
++    const inFlight = matching.filter(
++      (e) => e.status === 'pending_upload' || e.status === 'uploading',
++    ).length
++    const met = uploaded >= min
++    return {
++      req,
++      min,
++      uploaded,
++      inFlight,
++      met,
++      unmet: Math.max(0, min - uploaded),
++    }
++  })
++}
++
++export type StepEvidenceGroup = {
++  stepId: string
++  title: string
++  items: EvidenceLike[]
++}
++
++/**
++ * Evidence with a runbook_step_id under that step; job-level = no id or unknown id bucketed as job-level.
++ */
++export function groupEvidenceByStepOrJob(
++  job: Parameters<typeof flattenRunbookSteps>[0],
++  evidence: EvidenceLike[],
++): { stepGroups: StepEvidenceGroup[]; jobLevel: EvidenceLike[] } {
++  const steps = flattenRunbookSteps(job)
++  const stepGroups: StepEvidenceGroup[] = steps.map((s) => ({
++    stepId: s.id,
++    title: s.title,
++    items: [],
++  }))
++  const indexByStepId = new Map(stepGroups.map((g, i) => [g.stepId, i]))
++  const jobLevel: EvidenceLike[] = []
++
++  for (const ev of evidence) {
++    const sid = ev.runbook_step_id
++    if (!sid) {
++      jobLevel.push(ev)
++      continue
++    }
++    const idx = indexByStepId.get(sid)
++    if (idx === undefined) {
++      jobLevel.push(ev)
++      continue
++    }
++    stepGroups[idx].items.push(ev)
++  }
++
++  return {
++    stepGroups: stepGroups.filter((g) => g.items.length > 0),
++    jobLevel,
++  }
++}
++
++/** Assign each evidence item to at most one requirement (first matching type in requirement order). */
++export function assignEvidenceToRequirements(
++  job: { evidence_requirements?: EvidenceRequirementLike[] } | null | undefined,
++  evidence: EvidenceLike[],
++): { rows: { req: EvidenceRequirementLike; items: EvidenceLike[] }[]; other: EvidenceLike[] } {
++  const reqs = job?.evidence_requirements
++  if (!Array.isArray(reqs) || reqs.length === 0) {
++    return { rows: [], other: [...evidence] }
++  }
++  const used = new Set<string>()
++  const rows = reqs.map((req) => {
++    const items: EvidenceLike[] = []
++    for (const e of evidence) {
++      if (used.has(e.id)) continue
++      if (e.evidence_type === req.type) {
++        items.push(e)
++        used.add(e.id)
++      }
++    }
++    return { req, items }
++  })
++  const other = evidence.filter((e) => !used.has(e.id))
++  return { rows, other }
++}

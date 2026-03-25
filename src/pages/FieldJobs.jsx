@@ -1,59 +1,49 @@
 /**
  * FieldJobs — Job list page (A)
- * Enterprise-grade, mobile-first, information-dense layout.
+ * Mobile-first, uses JobsAdapter; unified status tokens + pull-to-refresh.
  */
 import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { Search, Loader2, ChevronRight, WifiOff, Briefcase, MapPin, Calendar, User } from 'lucide-react';
+import { Search, Loader2, ChevronRight, AlertCircle, Briefcase, Calendar, User } from 'lucide-react';
+import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import { apiClient } from '@/api/client';
 import { usePullToRefresh } from '@/hooks/usePullToRefresh';
 import PullToRefreshIndicator from '@/components/ui/PullToRefreshIndicator';
-
-const STATUS_CFG = {
-  assigned:         { label: 'Assigned',    bg: 'bg-slate-100',   text: 'text-slate-600',   dot: 'bg-slate-400',   border: 'border-slate-200'   },
-  en_route:         { label: 'En Route',    bg: 'bg-cyan-50',     text: 'text-cyan-700',    dot: 'bg-cyan-500',    border: 'border-cyan-200'    },
-  checked_in:       { label: 'Checked In',  bg: 'bg-purple-50',   text: 'text-purple-700',  dot: 'bg-purple-500',  border: 'border-purple-200'  },
-  in_progress:      { label: 'In Progress', bg: 'bg-blue-50',     text: 'text-blue-700',    dot: 'bg-blue-500',    border: 'border-blue-200'    },
-  paused:           { label: 'Paused',      bg: 'bg-amber-50',    text: 'text-amber-700',   dot: 'bg-amber-400',   border: 'border-amber-200'   },
-  pending_closeout: { label: 'Closeout',    bg: 'bg-orange-50',   text: 'text-orange-700',  dot: 'bg-orange-400',  border: 'border-orange-200'  },
-  submitted:        { label: 'Submitted',   bg: 'bg-green-50',    text: 'text-green-700',   dot: 'bg-green-500',   border: 'border-green-200'   },
-  approved:         { label: 'Approved',    bg: 'bg-emerald-50',  text: 'text-emerald-700', dot: 'bg-emerald-500', border: 'border-emerald-200' },
-  rejected:         { label: 'Rejected',    bg: 'bg-red-50',      text: 'text-red-700',     dot: 'bg-red-500',     border: 'border-red-200'     },
-  qc_required:      { label: 'QC Required', bg: 'bg-yellow-50',   text: 'text-yellow-700',  dot: 'bg-yellow-500',  border: 'border-yellow-200'  },
-  closed:           { label: 'Closed',      bg: 'bg-slate-50',    text: 'text-slate-400',   dot: 'bg-slate-300',   border: 'border-slate-200'   },
-};
+import { getFieldJobStatusDisplay, FIELD_JOB_STATUS_DISPLAY } from '@/lib/fieldJobExecutionModel';
+import {
+  FIELD_CARD,
+  FIELD_MAX_WIDTH,
+  FIELD_PAGE_PAD_X,
+  FIELD_PAGE_PAD_Y,
+} from '@/lib/fieldVisualTokens';
 
 const PRIO_CFG = {
-  urgent: { label: 'Urgent', cls: 'bg-red-100 text-red-700 border border-red-200' },
-  high:   { label: 'High',   cls: 'bg-orange-100 text-orange-700 border border-orange-200' },
-  medium: { label: 'Med',    cls: 'bg-slate-100 text-slate-600 border border-slate-200' },
-  low:    { label: 'Low',    cls: 'bg-slate-50 text-slate-400 border border-slate-200' },
+  urgent: { label: 'Urgent', dot: 'bg-red-500', text: 'text-red-700 font-semibold' },
+  high: { label: 'High', dot: 'bg-orange-500', text: 'text-slate-800 font-medium' },
+  medium: { label: 'Medium', dot: 'bg-slate-400', text: 'text-slate-600' },
+  low: { label: 'Low', dot: 'bg-slate-300', text: 'text-slate-500' },
 };
-
-const FILTER_CHIPS = ['all', 'assigned', 'in_progress', 'paused', 'pending_closeout', 'approved'];
+const FILTER_CHIPS = ['all','assigned','in_progress','paused','pending_closeout','approved'];
 
 function StatusBadge({ status }) {
-  const c = STATUS_CFG[status] || STATUS_CFG.assigned;
+  const c = getFieldJobStatusDisplay(status);
   return (
-    <span className={cn(
-      'inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-bold tracking-wide flex-shrink-0 border',
-      c.bg, c.text, c.border
-    )}>
-      <span className={cn('h-1.5 w-1.5 rounded-full flex-shrink-0', c.dot)} />
+    <span className={cn('inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold flex-shrink-0', c.pillBg, c.pillText)}>
+      <span className={cn('h-1.5 w-1.5 rounded-full flex-shrink-0', c.dotClass)} />
       {c.label}
     </span>
   );
 }
 
-function PriorityBadge({ priority }) {
-  const p = PRIO_CFG[priority] || PRIO_CFG.medium;
+function TechAvatar({ email }) {
+  const initials = (email || '?').split(/[@.]/).filter(Boolean).map(s => s[0]?.toUpperCase()).slice(0,2).join('');
   return (
-    <span className={cn('inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold tracking-wide flex-shrink-0', p.cls)}>
-      {p.label}
-    </span>
+    <div className="h-8 w-8 rounded-full bg-slate-800 text-white text-[10px] font-black flex items-center justify-center flex-shrink-0" title={email}>
+      {initials}
+    </div>
   );
 }
 
@@ -62,68 +52,60 @@ function fmtDate(d) {
   try { return format(parseISO(d), 'MMM d'); } catch { return d; }
 }
 
-function JobRow({ job }) {
-  return (
-    <Link
-      to={`/FieldJobDetail?id=${job.id}`}
-      className="group flex items-center gap-4 bg-white border-b border-slate-100 px-4 py-3.5 hover:bg-slate-50 active:bg-slate-100 transition-colors"
-    >
-      {/* Left accent bar */}
-      <div className={cn(
-        'w-1 self-stretch rounded-full flex-shrink-0',
-        STATUS_CFG[job.status]?.dot ? STATUS_CFG[job.status].dot : 'bg-slate-200'
-      )} />
+function ActualVsPlanned({ planned, actual }) {
+  if (!planned || !actual) return null;
+  const diff = Math.round((new Date(actual) - new Date(planned)) / 60000);
+  if (Math.abs(diff) <= 5) return <span className="text-emerald-600 font-semibold">on time</span>;
+  return diff > 0
+    ? <span className="text-red-500 font-semibold">+{diff}m late</span>
+    : <span className="text-emerald-600 font-semibold">{Math.abs(diff)}m early</span>;
+}
 
-      {/* Main content */}
-      <div className="flex-1 min-w-0 space-y-1">
-        {/* Row 1: title + status */}
-        <div className="flex items-start justify-between gap-2">
-          <p className="text-sm font-semibold text-slate-900 leading-snug flex-1">
-            {job.title}
-          </p>
+function JobCard({ job }) {
+  const prio = PRIO_CFG[job.priority] || PRIO_CFG.medium;
+  return (
+    <Link to={`/FieldJobDetail?id=${job.id}`}
+      className={cn('flex items-center gap-3 px-4 py-3.5 hover:bg-slate-50 active:bg-slate-100 transition-colors', FIELD_CARD)}
+    >
+      <div className="flex-1 min-w-0">
+        <div className="flex items-start gap-2 mb-1">
+          <p className="text-sm font-bold text-slate-900 flex-1 leading-snug line-clamp-2">{job.title}</p>
           <StatusBadge status={job.status} />
         </div>
-
-        {/* Row 2: project / site */}
-        {(job.project_name || job.site_name) && (
-          <div className="flex items-center gap-1 text-xs text-slate-500">
-            <MapPin className="h-3 w-3 flex-shrink-0 text-slate-400" />
-            <span className="truncate">{job.project_name || job.site_name}</span>
-          </div>
-        )}
-
-        {/* Row 3: meta chips */}
-        <div className="flex items-center gap-2 flex-wrap pt-0.5">
-          {job.priority && <PriorityBadge priority={job.priority} />}
+        <p className="text-xs text-slate-400 truncate mb-1.5">{job.project_name || job.site_name || '—'}</p>
+        <div className="flex items-center gap-3 text-[11px] flex-wrap">
+          <span className={cn('inline-flex items-center gap-1.5', prio.text)}>
+            <span className={cn('h-1.5 w-1.5 rounded-full flex-shrink-0', prio.dot)} aria-hidden />
+            {prio.label}
+          </span>
           {job.scheduled_date && (
-            <span className="flex items-center gap-1 text-[11px] text-slate-400">
-              <Calendar className="h-3 w-3" />
+            <span className="text-slate-400 inline-flex items-center gap-1">
+              <Calendar className="h-3 w-3 flex-shrink-0 opacity-70" aria-hidden />
               {fmtDate(job.scheduled_date)}
             </span>
           )}
           {job.assigned_to && (
-            <span className="flex items-center gap-1 text-[11px] text-slate-400 truncate max-w-[140px]">
-              <User className="h-3 w-3 flex-shrink-0" />
+            <span className="text-slate-400 truncate max-w-[100px] inline-flex items-center gap-1">
+              <User className="h-3 w-3 flex-shrink-0 opacity-70" aria-hidden />
               {job.assigned_to.split('@')[0]}
             </span>
           )}
-          {job.external_id && (
-            <span className="text-[11px] text-slate-300 font-mono">{job.external_id}</span>
-          )}
+          <ActualVsPlanned planned={job.work_start_time} actual={job.check_in_time} />
         </div>
       </div>
-
-      {/* Chevron */}
-      <ChevronRight className="h-4 w-4 text-slate-300 flex-shrink-0 group-hover:text-slate-500 transition-colors" />
+      <div className="flex items-center gap-2 flex-shrink-0">
+        {job.assigned_to && <TechAvatar email={job.assigned_to} />}
+        <ChevronRight className="h-4 w-4 text-slate-300" />
+      </div>
     </Link>
   );
 }
 
 export default function FieldJobs() {
-  const [search,  setSearch]  = useState('');
-  const [statusF, setStatusF] = useState('all');
+  const [search,   setSearch]   = useState('');
+  const [statusF,  setStatusF]  = useState('all');
 
-  const { data: jobs = [], isLoading, refetch } = useQuery({
+  const { data: jobs = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['field-jobs'],
     queryFn:  () => apiClient.getJobs(),
     staleTime: 30_000,
@@ -142,90 +124,63 @@ export default function FieldJobs() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-
-      {/* ── Sticky search + filters ───────────────── */}
-      <div className="sticky top-0 z-10 bg-white border-b border-slate-200 shadow-sm">
-        <div className="max-w-2xl mx-auto px-4 pt-3 pb-2 space-y-2">
-
-          {/* Search */}
+      <div className="sticky top-0 z-10 bg-white border-b border-slate-200/80">
+        <div className={cn(FIELD_MAX_WIDTH, 'mx-auto', FIELD_PAGE_PAD_X, 'pt-3 pb-2 space-y-2')}>
           <div className="relative">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400" />
-            <input
-              value={search}
-              onChange={e => setSearch(e.target.value)}
+            <Input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="Search jobs, sites, projects…"
-              className="w-full pl-9 pr-3 h-9 bg-slate-50 border border-slate-200 rounded-lg text-sm text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-slate-900/10 focus:border-slate-400 transition"
-            />
+              className="pl-9 bg-slate-50 border-0 rounded-xl focus-visible:ring-1 h-9 text-sm" />
           </div>
-
-          {/* Filter chips */}
-          <div className="flex gap-1.5 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
-            {FILTER_CHIPS.map(s => {
-              const count = s === 'all' ? jobs.length : jobs.filter(j => j.status === s).length;
-              return (
-                <button
-                  key={s}
-                  onClick={() => setStatusF(s)}
-                  className={cn(
-                    'flex-shrink-0 h-7 px-3 rounded-md text-[11px] font-semibold transition-all border',
-                    statusF === s
-                      ? 'bg-slate-900 text-white border-slate-900'
-                      : 'bg-white text-slate-500 border-slate-200 hover:border-slate-400 hover:text-slate-700'
-                  )}
-                >
-                  {s === 'all' ? 'All' : (STATUS_CFG[s]?.label || s)}
-                  <span className={cn(
-                    'ml-1.5 tabular-nums',
-                    statusF === s ? 'opacity-70' : 'opacity-50'
-                  )}>
-                    {count}
-                  </span>
-                </button>
-              );
-            })}
+          <div className="flex gap-1.5 overflow-x-auto pb-0.5" style={{ scrollbarWidth: 'none' }}>
+            {FILTER_CHIPS.map(s => (
+              <button key={s} onClick={() => setStatusF(s)}
+                className={cn('flex-shrink-0 h-7 px-3 rounded-full text-[11px] font-bold transition-colors capitalize',
+                  statusF === s ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                )}>
+                {s === 'all' ? `All (${jobs.length})` : (FIELD_JOB_STATUS_DISPLAY[s]?.label ?? s)}
+                {s !== 'all' && (
+                  <span className="ml-1 opacity-60">{jobs.filter(j => j.status === s).length}</span>
+                )}
+              </button>
+            ))}
           </div>
         </div>
       </div>
 
-      {/* ── Results header ────────────────────────── */}
-      <div className="max-w-2xl mx-auto px-4 py-2.5 flex items-center justify-between">
-        <p className="text-xs font-semibold text-slate-400 uppercase tracking-widest">
-          {isLoading ? '…' : `${filtered.length} work order${filtered.length !== 1 ? 's' : ''}`}
-        </p>
-      </div>
-
-      {/* ── Job list ──────────────────────────────── */}
       <div
         ref={containerRef}
         onTouchStart={onTouchStart}
         onTouchMove={onTouchMove}
         onTouchEnd={onTouchEnd}
-        className="max-w-2xl mx-auto pb-28 relative"
+        className={cn(FIELD_MAX_WIDTH, 'mx-auto', FIELD_PAGE_PAD_X, FIELD_PAGE_PAD_Y, 'pb-28 space-y-2.5 relative')}
         style={{ touchAction: 'pan-y' }}
       >
         <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
         {isLoading ? (
-          <div className="flex justify-center py-20">
-            <Loader2 className="h-5 w-5 animate-spin text-slate-300" />
+          <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-slate-300" /></div>
+        ) : isError ? (
+          <div className="flex flex-col items-center py-20 px-6 gap-3 text-center">
+            <AlertCircle className="h-10 w-10 text-amber-500" aria-hidden />
+            <p className="text-sm font-semibold text-slate-800">Couldn&apos;t load jobs</p>
+            <p className="text-xs text-slate-500 max-w-sm">
+              {error instanceof Error ? error.message : 'Check your connection and try again.'}
+            </p>
+          </div>
+        ) : jobs.length === 0 ? (
+          <div className="flex flex-col items-center py-20 px-6 gap-3 text-center text-slate-500">
+            <Briefcase className="h-10 w-10 text-slate-300" aria-hidden />
+            <p className="text-sm font-semibold text-slate-700">No jobs assigned</p>
+            <p className="text-xs text-slate-500">When work orders are assigned to you, they will appear here.</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center py-20 gap-3 text-slate-400">
-            <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center">
-              <Briefcase className="h-5 w-5 text-slate-300" />
-            </div>
-            <p className="text-sm font-medium">No jobs match your filters</p>
-            {search && (
-              <button onClick={() => setSearch('')} className="text-xs text-slate-500 underline underline-offset-2">
-                Clear search
-              </button>
-            )}
+            <Search className="h-8 w-8 text-slate-300" aria-hidden />
+            <p className="text-sm font-medium text-slate-600">No jobs match your filters</p>
+            <p className="text-xs text-slate-400">Try another status or clear search.</p>
           </div>
         ) : (
-          <div className="bg-white border border-slate-200 rounded-xl overflow-hidden mx-4">
-            {filtered.map((job, i) => (
-              <JobRow key={job.id} job={job} isLast={i === filtered.length - 1} />
-            ))}
-          </div>
+          filtered.map(job => <JobCard key={job.id} job={job} />)
         )}
       </div>
     </div>

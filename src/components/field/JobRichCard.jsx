@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { fieldJobDetailUrl, FIELD_JOB_TAB_RUNBOOK } from '@/utils/fieldRoutes';
 import {
   MapPin, Phone, Clock, ChevronRight, Package,
   Cloud, RefreshCw, CloudOff, Zap, AlertTriangle, ClipboardList,
@@ -235,7 +236,7 @@ export default function JobRichCard({ job }) {
       {/* ── CTA ───────────────────────────────────────────── */}
       <div className="px-4 pb-4 flex gap-2">
         <Link
-          to={`/JobDetail?id=${job.id}`}
+          to={fieldJobDetailUrl(job.id)}
           className={cn(
             'flex items-center justify-center gap-2 flex-1 h-11 rounded-[8px] font-bold text-sm active:opacity-80 transition-opacity',
             getCtaBg(job.status)
@@ -247,7 +248,7 @@ export default function JobRichCard({ job }) {
         {/* Quick-jump to Tasks for active jobs */}
         {['in_progress', 'checked_in', 'paused'].includes(job.status) && (
           <Link
-            to={`/JobDetail?id=${job.id}&tab=tasks`}
+            to={fieldJobDetailUrl(job.id, FIELD_JOB_TAB_RUNBOOK)}
             className="h-11 w-11 rounded-[8px] bg-slate-100 flex items-center justify-center flex-shrink-0 active:bg-slate-200 transition-colors"
             aria-label="Go to tasks"
             title="Jump to Tasks"

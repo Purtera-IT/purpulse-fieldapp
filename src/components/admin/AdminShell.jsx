@@ -5,6 +5,7 @@
 import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
+import { CANONICAL_JOBS_PATH } from '@/utils/fieldRoutes';
 import {
   Briefcase, ShieldCheck, Database, ScrollText,
   Users, Smartphone, BarChart3, ChevronLeft, Menu, FileSpreadsheet,
@@ -66,7 +67,7 @@ export default function AdminShell({ children, title, subtitle }) {
       </div>
 
       <div className="px-4 py-3 border-t border-slate-800">
-        <Link to={createPageUrl('Jobs')} className="flex items-center gap-2 text-xs text-slate-400 hover:text-white">
+        <Link to={CANONICAL_JOBS_PATH} className="flex items-center gap-2 text-xs text-slate-400 hover:text-white">
           <ChevronLeft className="h-3.5 w-3.5" /> Back to Field App
         </Link>
       </div>

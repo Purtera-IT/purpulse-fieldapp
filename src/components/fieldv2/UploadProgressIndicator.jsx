@@ -6,6 +6,7 @@ import React, { useEffect, useState } from 'react'
 import { AlertCircle, CheckCircle2, Pause, Trash2, Upload } from 'lucide-react'
 import { uploadQueue } from '@/lib/uploadQueue'
 import { cn } from '@/lib/utils'
+import { FIELD_BODY, FIELD_META } from '@/lib/fieldVisualTokens'
 
 export default function UploadProgressIndicator({ jobId, isOnline }) {
   const [uploads, setUploads] = useState([])
@@ -39,7 +40,7 @@ export default function UploadProgressIndicator({ jobId, isOnline }) {
   const inProgressCount = uploads.filter(u => u.status === 'uploading').length
 
   return (
-    <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 space-y-2">
+    <div className="bg-blue-50 border border-blue-200 rounded-xl p-3 space-y-2 shadow-sm">
       <div className="flex items-center gap-2">
         <Upload className="h-4 w-4 text-blue-600" />
         <p className="text-sm font-semibold text-blue-900">Pending Uploads</p>
@@ -56,7 +57,7 @@ export default function UploadProgressIndicator({ jobId, isOnline }) {
       {/* Upload list */}
       <div className="space-y-2 border-t border-blue-200 pt-2">
         {uploads.map(upload => (
-          <div key={upload.id} className="bg-white rounded-lg p-2 space-y-1.5">
+          <div key={upload.id} className="bg-white rounded-xl border border-slate-100/90 p-2 space-y-1.5 shadow-sm">
             {/* Title + status */}
             <div className="flex items-center gap-2">
               {upload.status === 'uploading' && <div className="h-3 w-3 rounded-full bg-blue-500 animate-pulse" />}
@@ -79,7 +80,7 @@ export default function UploadProgressIndicator({ jobId, isOnline }) {
                   style={{ width: `${getProgress(upload)}%` }}
                 />
               </div>
-              <div className="flex items-center justify-between text-[10px] text-slate-500">
+              <div className={cn('flex items-center justify-between', FIELD_META)}>
                 <span>
                   {getProgress(upload)}% · {formatFileSize(upload.uploadedBytes)} / {formatFileSize(upload.metadata.fileSize)}
                 </span>
@@ -92,7 +93,7 @@ export default function UploadProgressIndicator({ jobId, isOnline }) {
             </div>
 
             {/* Metadata */}
-            <div className="text-[10px] text-slate-400 space-y-0.5">
+            <div className={cn(FIELD_BODY, 'text-slate-400 space-y-0.5')}>
               <div>
                 Technician: <span className="text-slate-600 font-mono">{upload.metadata.technician.email}</span>
               </div>
@@ -110,14 +111,14 @@ export default function UploadProgressIndicator({ jobId, isOnline }) {
                 {upload.status === 'uploading' && (
                   <button
                     onClick={() => handlePause(upload.id)}
-                    className="flex-1 h-6 px-2 rounded-sm bg-amber-100 text-amber-700 text-[10px] font-bold hover:bg-amber-200 transition-colors flex items-center justify-center gap-1"
+                    className="flex-1 h-7 px-2 rounded-lg bg-amber-100 text-amber-700 text-[10px] font-bold hover:bg-amber-200 transition-colors flex items-center justify-center gap-1"
                   >
                     <Pause className="h-3 w-3" /> Pause
                   </button>
                 )}
                 <button
                   onClick={() => handleCancel(upload.id)}
-                  className="flex-1 h-6 px-2 rounded-sm bg-red-100 text-red-700 text-[10px] font-bold hover:bg-red-200 transition-colors flex items-center justify-center gap-1"
+                  className="flex-1 h-7 px-2 rounded-lg bg-red-100 text-red-700 text-[10px] font-bold hover:bg-red-200 transition-colors flex items-center justify-center gap-1"
                 >
                   <Trash2 className="h-3 w-3" /> Cancel
                 </button>

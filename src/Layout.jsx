@@ -1,29 +1,27 @@
 /**
  * Layout.jsx — Purpulse Field App Shell
- * Provides: 5-tab bottom nav, Framer Motion route transitions, full safe-area support.
+ * Bottom nav (canonical 3 tabs), Framer Motion route transitions, safe-area support.
  *
- * Nav tabs: Jobs | Time | Chat | Support | Profile
+ * Nav: FieldJobs | Support | Profile
+ * Full-screen (no shell): FieldJobDetail, Onboarding
  * Admin pages use AdminShell directly — no Layout wrapping.
  */
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { createPageUrl } from '@/utils';
-import { Briefcase, Clock, MessageCircle, HelpCircle, User } from 'lucide-react';
+import { Briefcase, HelpCircle, User } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 
 import { useAppPreferences } from './hooks/useAppPreferences';
 
 const NAV_ITEMS = [
-  { page: 'Jobs',    path: '/Jobs',    icon: Briefcase,      label: 'Jobs'    },
-  { page: 'TimeLog', path: '/TimeLog', icon: Clock,          label: 'Time'    },
-  { page: 'Chat',    path: '/Chat',    icon: MessageCircle,  label: 'Chat'    },
-  { page: 'Support', path: '/Support', icon: HelpCircle,     label: 'Support' },
-  { page: 'Profile', path: '/Profile', icon: User,           label: 'Profile' },
+  { to: '/FieldJobs', page: 'FieldJobs', icon: Briefcase,  label: 'Jobs'    },
+  { to: '/Support',   page: 'Support',   icon: HelpCircle, label: 'Support' },
+  { to: '/Profile',   page: 'Profile',   icon: User,       label: 'Profile' },
 ];
 
-// Pages that suppress all chrome (full-screen flows)
-const HIDE_SHELL_PAGES = ['JobDetail', 'Onboarding'];
+const HIDE_SHELL_PAGES = ['FieldJobDetail', 'Onboarding'];
 
 const pageVariants = {
   initial:  { opacity: 0, x: 24 },
@@ -49,7 +47,6 @@ export default function Layout({ children, currentPageName }) {
       className="min-h-screen bg-slate-50 flex flex-col"
       style={{ paddingTop: 'env(safe-area-inset-top)' }}
     >
-      {/* ── Animated page content ─────────────────────── */}
       <main id="main-content" className="flex-1 relative overflow-hidden">
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
@@ -66,7 +63,6 @@ export default function Layout({ children, currentPageName }) {
         </AnimatePresence>
       </main>
 
-      {/* ── Bottom Tab Bar ────────────────────────────── */}
       {!hideNav && (
         <nav
           aria-label="Primary navigation"
@@ -78,13 +74,13 @@ export default function Layout({ children, currentPageName }) {
           }}
         >
           <div className="max-w-2xl mx-auto flex">
-            {NAV_ITEMS.map(item => {
+            {NAV_ITEMS.map((item) => {
               const Icon     = item.icon;
               const isActive = currentPageName === item.page;
               return (
                 <Link
                   key={item.page}
-                  to={createPageUrl(item.page)}
+                  to={item.to ?? createPageUrl(item.page)}
                   aria-current={isActive ? 'page' : undefined}
                   aria-label={item.label}
                   className={cn(

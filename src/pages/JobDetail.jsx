@@ -1,5 +1,8 @@
 /**
- * JobDetail — Execution cockpit for a field job.
+ * @deprecated LEGACY — Not registered in pages.config.js. App.jsx redirects /JobDetail → /FieldJobDetail.
+ * Kept on disk for reference; technician flow must use /FieldJobDetail.
+ *
+ * JobDetail — Execution cockpit for a field job (pre–Iteration 1 shell).
  *
  * Desktop (≥1024px): 3-column enterprise grid
  *   Left  320px  — Metadata / Overview
@@ -17,6 +20,7 @@ import { Link } from 'react-router-dom';
 import { ArrowLeft, Loader2, Info, ClipboardList, Clock, MessageCircle, Folder } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { MOCK_JOBS } from '../lib/mockJobs';
+import { CANONICAL_JOBS_PATH } from '@/utils/fieldRoutes';
 
 import JobDetailOverview from '../components/field/JobDetailOverview';
 import JobActionBar from '../components/field/JobActionBar';
@@ -99,7 +103,7 @@ export default function JobDetail() {
         {/* Title + CTA row */}
         <div className="px-3 pt-2 pb-0 flex items-center gap-2">
           <Link
-            to="/Jobs"
+            to={CANONICAL_JOBS_PATH}
             className="h-7 w-7 rounded-[6px] bg-slate-100 flex items-center justify-center flex-shrink-0 active:bg-slate-200 transition-colors"
             aria-label="Back to jobs"
           >

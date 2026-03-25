@@ -7,6 +7,7 @@
  */
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { fieldJobDetailUrl, FIELD_JOB_TAB_RUNBOOK } from '@/utils/fieldRoutes';
 import { ClipboardList, Info } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { STATUS_CFG, PRIORITY_CFG } from './JobRichCard';
@@ -94,7 +95,7 @@ export default function ActiveJobHero({ job }) {
           <div className="flex items-center gap-1.5 mt-1">
             {/* Quick action: Tasks */}
             <Link
-              to={`/JobDetail?id=${job.id}&tab=tasks`}
+              to={fieldJobDetailUrl(job.id, FIELD_JOB_TAB_RUNBOOK)}
               className="h-8 w-8 rounded-[6px] bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors flex-shrink-0"
               aria-label="Tasks"
               title="Tasks"
@@ -103,7 +104,7 @@ export default function ActiveJobHero({ job }) {
             </Link>
             {/* Quick action: Details */}
             <Link
-              to={`/JobDetail?id=${job.id}`}
+              to={fieldJobDetailUrl(job.id)}
               className="h-8 w-8 rounded-[6px] bg-slate-100 flex items-center justify-center hover:bg-slate-200 transition-colors flex-shrink-0"
               aria-label="Details"
               title="Details"
@@ -112,7 +113,7 @@ export default function ActiveJobHero({ job }) {
             </Link>
             {/* Continue CTA */}
             <Link
-              to={`/JobDetail?id=${job.id}`}
+              to={fieldJobDetailUrl(job.id)}
               className="h-8 px-3 rounded-[6px] bg-[#0B2D5C] text-white text-[11px] font-bold flex items-center gap-1 whitespace-nowrap hover:bg-[#0B66B2] transition-colors active:opacity-80"
             >
               Continue

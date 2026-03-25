@@ -1,188 +1,183 @@
 /**
- * FieldTimeTracker — TimeLog tab (G)
- * Clock-in/out, manual entry, and activity log.
- * Persists to Activity + AuditLog.
+ * FieldTimeTracker — Work session via TimeEntry (work_start / work_stop), aligned with TimerPanel seams.
+ * Embedded in Job Overview. Session state is derived from time entries + job lifecycle, not local clock truth.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { Play, Square, Plus, Clock, Loader2, Edit3 } from 'lucide-react';
+import { Play, Square, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
-import { format, parseISO } from 'date-fns';
 import { toast } from 'sonner';
-import { uuidv4 } from '@/lib/uuid';
-import { defaultAdapters } from '@/lib/fieldAdapters';
+import { apiClient } from '@/api/client';
 import { useAuth } from '@/lib/AuthContext';
-import { emitArrivalForClockIn } from '@/lib/travelArrivalEvent';
+import { telemetryTimeClockStart, telemetryTimeClockStop } from '@/lib/telemetry';
+import { emitCanonicalEventsForTimeEntry } from '@/lib/travelArrivalEvent';
 import { PreArrivalAckSheet } from '@/components/field/AcknowledgementSheets.jsx';
+import {
+  deriveTimerSessionFromTimeEntries,
+  formatWorkedDuration,
+} from '@/lib/fieldJobExecutionModel';
+import {
+  FIELD_BADGE_NEUTRAL,
+  FIELD_BODY,
+  FIELD_CARD,
+  FIELD_CTRL_H,
+  FIELD_OVERLINE,
+} from '@/lib/fieldVisualTokens';
 
-const EVENT_TYPES = ['clock_in','clock_out','start_step','end_step','upload','label','note_added'];
-const EVENT_ICON = {
-  clock_in:  '🟢', clock_out: '🔴', start_step: '▶️',
-  end_step:  '✅', upload:    '📷', label:      '🏷️', note_added:'📝',
-};
-
-function fmtTs(ts) { try { return format(parseISO(ts), 'MMM d HH:mm:ss'); } catch { return ts || '—'; } }
-
-function ActivityRow({ a }) {
-  return (
-    <div className="flex items-start gap-3 py-2.5 border-b border-slate-50 last:border-0">
-      <span className="text-base mt-0.5 flex-shrink-0">{EVENT_ICON[a.event_type] || '⚡'}</span>
-      <div className="flex-1 min-w-0">
-        <p className="text-xs font-bold text-slate-800 capitalize">{a.event_type?.replace(/_/g,' ')}</p>
-        <p className="text-[10px] text-slate-400 truncate">{a.user_id}</p>
-        {a.meta?.note && <p className="text-[11px] text-slate-500 mt-0.5 italic">"{a.meta.note}"</p>}
-      </div>
-      <span className="text-[10px] text-slate-400 font-mono flex-shrink-0">{fmtTs(a.timestamp)}</span>
-    </div>
-  );
+function makeClientId() {
+  return `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-export default function FieldTimeTracker({ job, activities, adapters, onRefresh }) {
-  const adapter = adapters?.activity || defaultAdapters.activity;
-  const { user } = useAuth();
-  const [clocked,   setClockedIn]  = useState(() => activities.some(a => a.event_type === 'clock_in'));
-  const [showManual,setShowManual] = useState(false);
+export default function FieldTimeTracker({
+  job,
+  timeEntries = [],
+  executionView,
+  onRefresh,
+  variant = 'default',
+}) {
+  const { user } = useAuth(); // required for emitCanonicalEventsForTimeEntry(work_start)
   const [arrivalAckOpen, setArrivalAckOpen] = useState(false);
-  const [manualType,setManualType] = useState('note_added');
-  const [manualNote,setManualNote] = useState('');
-  const [manualTs,  setManualTs]   = useState('');
+  const [tick, setTick] = useState(0);
   const qc = useQueryClient();
 
-  const log = useMutation({
-    mutationFn: data => adapter.logActivity(data, 'admin@purpulse.com'),
-    onSuccess: () => { qc.invalidateQueries({ queryKey: ['fj-activities', job.id] }); onRefresh?.(); },
+  useEffect(() => {
+    if (!executionView?.timer?.workSegmentOpen) return;
+    const id = setInterval(() => setTick((t) => t + 1), 1000);
+    return () => clearInterval(id);
+  }, [executionView?.timer?.workSegmentOpen]);
+
+  const liveTimer = useMemo(() => {
+    void tick;
+    return deriveTimerSessionFromTimeEntries(timeEntries);
+  }, [timeEntries, tick]);
+
+  const createEntry = useMutation({
+    mutationFn: async ({ entryType, timestamp }) =>
+      apiClient.createTimeEntry(job.id, {
+        job_id: job.id,
+        entry_type: entryType,
+        timestamp,
+        source: 'app',
+        sync_status: 'pending',
+        locked: false,
+        client_request_id: makeClientId(),
+      }),
+    onSuccess: (_, { entryType }) => {
+      qc.invalidateQueries({ queryKey: ['fj-time-entries', job.id] });
+      onRefresh?.();
+      if (entryType === 'work_start') toast.success('Work timer started');
+      if (entryType === 'work_stop') toast.success('Work timer stopped');
+    },
+    onError: (e) => {
+      toast.error(e instanceof Error ? e.message : 'Could not save time entry');
+    },
   });
 
-  const performClockIn = async (arrivalScopeAcknowledgements) => {
+  const performWorkStart = async (arrivalScopeAcknowledgements) => {
     const ts = new Date().toISOString();
     try {
-      await emitArrivalForClockIn({ job, user, timestamp: ts, arrivalScopeAcknowledgements });
+      await emitCanonicalEventsForTimeEntry({
+        job,
+        user,
+        entryType: 'work_start',
+        timestamp: ts,
+        travelMinutes: null,
+        location: null,
+        etaAckTimestamp: null,
+        arrivalScopeAcknowledgements: arrivalScopeAcknowledgements ?? null,
+      });
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : 'Could not queue arrival telemetry');
+      toast.error(e instanceof Error ? e.message : 'Could not queue arrival/work telemetry');
       return;
     }
-    log.mutate({
-      id:              uuidv4(),
-      event_type:      'clock_in',
-      user_id:         'admin@purpulse.com',
-      work_order_id:   job.id,
-      timestamp:       ts,
-      meta:            { device_id: 'device-web', app_version: '2.4.1' },
-    });
-    setClockedIn(true);
-    toast.success('Clocked in');
+    telemetryTimeClockStart(job.id, 'work_start');
+    createEntry.mutate({ entryType: 'work_start', timestamp: ts });
+    setArrivalAckOpen(false);
   };
 
-  const handleClockOut = () => {
-    log.mutate({
-      id:              uuidv4(),
-      event_type:      'clock_out',
-      user_id:         'admin@purpulse.com',
-      work_order_id:   job.id,
-      timestamp:       new Date().toISOString(),
-      meta:            { device_id: 'device-web', app_version: '2.4.1' },
-    });
-    setClockedIn(false);
-    toast.success('Clocked out');
+  const performWorkStop = () => {
+    const ts = new Date().toISOString();
+    telemetryTimeClockStop(job.id, 'work_stop', liveTimer.workedSeconds);
+    createEntry.mutate({ entryType: 'work_stop', timestamp: ts });
   };
 
-  const handleManualSubmit = () => {
-    if (!manualTs && !manualNote) { toast.error('Add a timestamp or note'); return; }
-    log.mutate({
-      id:            uuidv4(),
-      event_type:    manualType,
-      user_id:       'admin@purpulse.com',
-      work_order_id: job.id,
-      timestamp:     manualTs ? new Date(manualTs).toISOString() : new Date().toISOString(),
-      meta:          { note: manualNote || undefined },
-      session_id:    'manual-' + uuidv4().slice(0,8),
-    });
-    setManualNote(''); setManualTs(''); setShowManual(false);
-    toast.success('Activity logged');
-  };
-
-  const sorted = [...activities].sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp));
+  const embedded = variant === 'embedded';
+  const { canClockIn, canClockOut, clockInDisabledReason } = executionView;
+  const workedLabel = formatWorkedDuration(liveTimer.workedSeconds);
 
   return (
-    <div className="space-y-4">
+    <div className={embedded ? 'space-y-3' : 'space-y-4'}>
       <PreArrivalAckSheet
         open={arrivalAckOpen}
         onOpenChange={setArrivalAckOpen}
         jobLabel={job?.title}
         onConfirm={(ackState) => {
-          void performClockIn(ackState);
+          void performWorkStart(ackState);
         }}
       />
 
-      {/* Clock in/out */}
-      <div className="bg-white rounded-xl border border-slate-100 p-4">
-        <div className="flex items-center justify-between mb-3">
-          <p className="text-xs font-black text-slate-500 uppercase tracking-widest">Session Control</p>
-          <span className={cn('text-[10px] font-bold px-2 py-0.5 rounded-full', clocked ? 'bg-emerald-50 text-emerald-700' : 'bg-slate-100 text-slate-500')}>
-            {clocked ? '● Clocked In' : '○ Off Clock'}
+      <div className={cn(FIELD_CARD, embedded ? 'p-3' : 'p-4')}>
+        <div className={cn('flex items-center justify-between gap-2', embedded ? 'mb-2' : 'mb-3')}>
+          <p className={FIELD_OVERLINE}>
+            Work timer
+          </p>
+          <span
+            className={cn(
+              'text-[10px] font-bold px-2 py-0.5 rounded-full tabular-nums border-0',
+              liveTimer.workSegmentOpen
+                ? 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100/80'
+                : FIELD_BADGE_NEUTRAL
+            )}
+          >
+            {liveTimer.workSegmentOpen ? '● Running' : '○ Stopped'}
           </span>
         </div>
+        <p
+          className={cn(
+            'font-mono font-bold text-slate-800 tabular-nums mb-2',
+            embedded ? 'text-sm' : 'text-base'
+          )}
+        >
+          {workedLabel}
+          <span className="text-[10px] font-sans font-semibold text-slate-400 ml-2 normal-case">
+            on this job
+          </span>
+        </p>
+        <p className={cn(FIELD_BODY, 'mb-3')}>{executionView.sessionSummaryLine}</p>
         <div className="flex gap-2">
-          <button onClick={() => setArrivalAckOpen(true)} disabled={clocked || log.isPending}
-            className="flex-1 h-11 rounded-[8px] bg-emerald-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-emerald-700 transition-colors">
-            <Play className="h-4 w-4" /> Clock In
+          <button
+            type="button"
+            onClick={() => setArrivalAckOpen(true)}
+            disabled={!canClockIn || createEntry.isPending}
+            title={!canClockIn ? clockInDisabledReason || undefined : undefined}
+            className={cn(
+              'flex-1 rounded-xl bg-emerald-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-emerald-700 transition-colors',
+              embedded ? 'h-9 text-xs' : cn(FIELD_CTRL_H, 'text-sm')
+            )}
+          >
+            <Play className={embedded ? 'h-3.5 w-3.5' : 'h-4 w-4'} /> Start timer
           </button>
-          <button onClick={handleClockOut} disabled={!clocked || log.isPending}
-            className="flex-1 h-11 rounded-[8px] bg-red-600 text-white text-sm font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-red-700 transition-colors">
-            <Square className="h-4 w-4" /> Clock Out
+          <button
+            type="button"
+            onClick={performWorkStop}
+            disabled={!canClockOut || createEntry.isPending}
+            className={cn(
+              'flex-1 rounded-xl bg-red-600 text-white font-bold flex items-center justify-center gap-2 disabled:opacity-40 hover:bg-red-700 transition-colors',
+              embedded ? 'h-9 text-xs' : cn(FIELD_CTRL_H, 'text-sm')
+            )}
+          >
+            {createEntry.isPending ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <>
+                <Square className={embedded ? 'h-3.5 w-3.5' : 'h-4 w-4'} /> Stop timer
+              </>
+            )}
           </button>
         </div>
-      </div>
-
-      {/* Manual entry */}
-      <div className="bg-white rounded-xl border border-slate-100">
-        <button onClick={() => setShowManual(s => !s)}
-          className="w-full flex items-center gap-3 px-4 py-3.5 text-left hover:bg-slate-50 transition-colors rounded-xl">
-          <Edit3 className="h-4 w-4 text-slate-400" />
-          <p className="text-sm font-bold text-slate-700 flex-1">Manual Entry</p>
-          <Plus className={cn('h-4 w-4 text-slate-400 transition-transform', showManual && 'rotate-45')} />
-        </button>
-        {showManual && (
-          <div className="px-4 pb-4 space-y-3 border-t border-slate-50">
-            <div className="pt-2 grid grid-cols-2 gap-3">
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Event Type</label>
-                <select value={manualType} onChange={e => setManualType(e.target.value)}
-                  className="w-full h-9 rounded-lg border border-slate-200 text-xs font-semibold px-3 focus:outline-none focus:ring-1 focus:ring-slate-400 capitalize bg-white">
-                  {EVENT_TYPES.map(t => <option key={t} value={t}>{t.replace(/_/g,' ')}</option>)}
-                </select>
-              </div>
-              <div>
-                <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Timestamp</label>
-                <input type="datetime-local" value={manualTs} onChange={e => setManualTs(e.target.value)}
-                  className="w-full h-9 rounded-lg border border-slate-200 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-slate-400" />
-              </div>
-            </div>
-            <div>
-              <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1 block">Note</label>
-              <input value={manualNote} onChange={e => setManualNote(e.target.value)}
-                placeholder="Optional note…"
-                className="w-full h-9 rounded-lg border border-slate-200 text-xs px-3 focus:outline-none focus:ring-1 focus:ring-slate-400" />
-            </div>
-            <button onClick={handleManualSubmit} disabled={log.isPending}
-              className="w-full h-10 rounded-lg bg-slate-900 text-white text-xs font-bold flex items-center justify-center gap-2 hover:bg-slate-700 disabled:opacity-50">
-              {log.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <><Plus className="h-3.5 w-3.5" /> Log Activity</>}
-            </button>
-          </div>
+        {!canClockIn && clockInDisabledReason && (
+          <p className={cn(FIELD_BODY, 'mt-2')}>{clockInDisabledReason}</p>
         )}
-      </div>
-
-      {/* Activity log */}
-      <div className="bg-white rounded-xl border border-slate-100">
-        <div className="px-4 py-2.5 border-b border-slate-50 flex items-center gap-2">
-          <Clock className="h-3.5 w-3.5 text-slate-400" />
-          <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Activity Log ({sorted.length})</p>
-        </div>
-        <div className="px-4 py-2 max-h-72 overflow-y-auto">
-          {sorted.length === 0 ? (
-            <p className="text-center text-slate-400 text-xs py-6">No activities yet.</p>
-          ) : sorted.map(a => <ActivityRow key={a.id} a={a} />)}
-        </div>
       </div>
     </div>
   );

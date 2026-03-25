@@ -7,6 +7,7 @@ import { Link } from 'react-router-dom';
 import { ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { getProgress, formatSchedule } from './JobRichCard';
+import { fieldJobDetailUrl } from '@/utils/fieldRoutes';
 
 const STATUS_DOT = {
   assigned:         'bg-slate-400',
@@ -44,7 +45,7 @@ export default function JobsListRow({ job }) {
 
   return (
     <Link
-      to={`/JobDetail?id=${job.id}`}
+      to={fieldJobDetailUrl(job.id)}
       className={cn(
         'flex items-center gap-3 py-3 px-4 bg-white border border-neutral-200 rounded-[6px] border-l-4 active:bg-slate-50 transition-colors focus:outline-none focus:ring-2 focus:ring-[#0B2D5C] focus:ring-offset-2',
         stripeCls

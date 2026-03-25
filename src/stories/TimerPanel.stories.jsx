@@ -47,13 +47,14 @@ export const Traveling = {
 
 export const CompactWorking = {
   args: { statusLabel: 'In Progress', compact: true },
-  decorators: [withEntries([
-    { id: 'e1', entry_type: 'work_start', timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() },
-  ])],
   decorators: [
     withEntries([
       { id: 'e1', entry_type: 'work_start', timestamp: new Date(Date.now() - 30 * 60 * 1000).toISOString() },
     ]),
-    (Story) => <div className="bg-emerald-600 p-3 rounded-lg w-64"><Story /></div>,
+    (Story) => (
+      <div className="bg-emerald-600 p-3 rounded-lg w-64">
+        <Story />
+      </div>
+    ),
   ],
 };
