@@ -10,7 +10,10 @@
 let pca: any | null = null
 let initPromise: Promise<any | null> | null = null
 
-async function getOrCreatePca(): Promise<PublicClientApplication | null> {
+// Bundler-opaque specifier — prevents Rollup from trying to resolve @azure/msal-browser at build time
+const MSAL_PKG = ['@azure', 'msal-browser'].join('/')
+
+async function getOrCreatePca(): Promise<any | null> {
   if (import.meta.env.VITE_USE_ENTRA_TOKEN_FOR_AZURE_API !== 'true') return null
 
   const clientId = import.meta.env.VITE_ENTRA_CLIENT_ID as string | undefined
@@ -26,7 +29,7 @@ async function getOrCreatePca(): Promise<PublicClientApplication | null> {
   if (initPromise) return initPromise
 
   initPromise = (async () => {
-    const { PublicClientApplication } = await import('@azure/msal-browser')
+    const { PublicClientApplication } = await import(/* @vite-ignore */ MSAL_PKG)
     const authority =
       (import.meta.env.VITE_ENTRA_AUTHORITY as string) ||
       `https://login.microsoftonline.com/${tenantId}`
