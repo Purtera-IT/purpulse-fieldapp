@@ -382,8 +382,9 @@ export async function emitCanonicalEventsForTimeEntry({
  * @returns {number | null}
  */
 export function computeOpenTravelMinutesForJob(entries, jobId, endIso) {
+  const jid = jobId != null ? String(jobId) : '';
   const forJob = [...(entries || [])]
-    .filter((e) => e.job_id === jobId)
+    .filter((e) => e.job_id != null && String(e.job_id) === jid)
     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
   let lastStart = null;
   const endT = new Date(endIso).getTime();

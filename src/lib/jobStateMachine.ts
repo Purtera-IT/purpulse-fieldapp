@@ -47,20 +47,22 @@ export const STATE_MACHINE: Record<JobStatus, StateTransition[]> = {
     {
       from: 'assigned',
       to: 'en_route',
-      label: 'Start Route',
+      label: 'Start route / head to site',
       allowedRoles: ['technician', 'dispatcher', 'admin'],
       evidenceRequirements: [],
-      description: 'Technician is en route to site',
+      description:
+        'Commit ETA, record travel start, and mark the job en route — travel milestone, not work time.',
     },
   ],
   en_route: [
     {
       from: 'en_route',
       to: 'checked_in',
-      label: 'Check In',
+      label: 'Check in on site',
       allowedRoles: ['technician', 'dispatcher', 'admin'],
       evidenceRequirements: [],
-      description: 'Technician has arrived at site (GPS or manual)',
+      description:
+        'Confirm you are on site; records arrival/check-in and unlocks start work + readiness (separate from the work timer).',
     },
   ],
   checked_in: [

@@ -3,6 +3,10 @@
  * Does not invent backend fields — only projects what the job + evidence already provide.
  */
 
+import { getArtifactPersistencePresentation } from '@/lib/artifactPersistencePresentation'
+
+export { getArtifactPersistencePresentation }
+
 export const FALLBACK_EVIDENCE_TYPES = [
   'before_photo',
   'after_photo',
@@ -18,6 +22,8 @@ export type EvidenceLike = {
   evidence_type?: string
   status?: EvidenceStatus | string
   file_url?: string
+  /** Optional; when present, still use conservative remote wording (no extra durability claim). */
+  azure_blob_url?: string | null
   runbook_step_id?: string
   upload_error?: string
   /** Backend string; normalize with `normalizeEvidenceQcStatus` in evidenceQcViewModel */
@@ -91,55 +97,25 @@ export function getEvidenceStatusPresentation(ev: EvidenceLike): {
   shortLabel: string
   tone: 'ok' | 'pending' | 'error' | 'muted'
 } {
-  const status = ev.status as EvidenceStatus | undefined
-  const err = ev.upload_error?.trim()
-
-  if (status === 'error') {
-    return {
-      label: err ? `Failed — ${err}` : 'Failed',
-      shortLabel: 'Failed',
-      tone: 'error',
-    }
+  const a = getArtifactPersistencePresentation(ev)
+  return {
+    label: a.summaryLine,
+    shortLabel: a.badgeShort,
+    tone: a.badgeTone,
   }
-  if (status === 'pending_upload') {
-    return { label: 'Pending upload', shortLabel: 'Pending', tone: 'pending' }
-  }
-  if (status === 'uploading') {
-    return { label: 'Uploading', shortLabel: 'Uploading', tone: 'pending' }
-  }
-  if (status === 'replaced') {
-    return { label: 'Replaced', shortLabel: 'Replaced', tone: 'muted' }
-  }
-  if (status === 'uploaded') {
-    const url = ev.file_url || ''
-    if (url.startsWith('data:')) {
-      return {
-        label: 'Preview on job · sync may be pending',
-        shortLabel: 'Preview',
-        tone: 'pending',
-      }
-    }
-    if (url.startsWith('mock://')) {
-      return {
-        label: 'Saved on job · storage sync pending',
-        shortLabel: 'Pending sync',
-        tone: 'pending',
-      }
-    }
-    return { label: 'Available', shortLabel: 'Saved', tone: 'ok' }
-  }
-  return { label: status || 'Unknown', shortLabel: status || '—', tone: 'muted' }
 }
 
+/**
+ * Compatibility shim only — returns `detailLine` for a synthetic uploaded row. Prefer
+ * `getArtifactPersistencePresentation` for real evidence objects. Do not extend this API.
+ */
 export function getStorageNoteForFileUrl(fileUrl: string | null | undefined): string | null {
-  if (!fileUrl) return null
-  if (fileUrl.startsWith('data:')) {
-    return 'Saved on this job as a preview. Storage sync may still be pending.'
-  }
-  if (fileUrl.startsWith('mock://')) {
-    return 'Saved on this job. Storage sync is still pending.'
-  }
-  return null
+  const a = getArtifactPersistencePresentation({
+    id: '',
+    status: 'uploaded',
+    file_url: fileUrl ?? '',
+  })
+  return a.detailLine
 }
 
 export type RequirementPartitionRow = {
@@ -151,6 +127,7 @@ export type RequirementPartitionRow = {
   unmet: number
 }
 
+/** `uploaded` count = `status === 'uploaded'` only — excludes pending_upload / uploading rows. */
 export function partitionEvidenceForRequirements(
   job: { evidence_requirements?: EvidenceRequirementLike[] } | null | undefined,
   evidence: EvidenceLike[],

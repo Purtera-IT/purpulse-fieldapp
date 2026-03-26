@@ -19,11 +19,16 @@ import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { executeJobStateTransitionMutation } from '@/lib/jobStateTransitionMutation';
 import PreJobToolCheckModal from './PreJobToolCheckModal';
-import { EtaAcknowledgementSheet } from '@/components/field/AcknowledgementSheets.jsx';
+import {
+  EtaAcknowledgementSheet,
+  OnSiteCheckInSheet,
+} from '@/components/field/AcknowledgementSheets.jsx';
 import { BTN_SECONDARY, FIELD_CARD, FIELD_CTRL_H, FIELD_META } from '@/lib/fieldVisualTokens';
 
 const READINESS_HINT_EN_ROUTE =
-  'You will confirm travel / ETA details before the job moves to en route.';
+  'ETA sheet commits arrival plan and travel start; job goes en route. Work timer comes only after check-in.';
+const READINESS_HINT_CHECK_IN =
+  'Confirm you are on site before check-in. Then Start work, then the timer for billable time.';
 const READINESS_HINT_START_WORK =
   'A short pre-start checklist runs before the job moves to in progress.';
 
@@ -51,6 +56,7 @@ function RequirementItem({ requirement, blocker }) {
 
 export default function JobStateTransitioner({
   job,
+  timeEntries = [],
   evidence = [],
   runbookComplete = false,
   hasSignature = false,
@@ -62,8 +68,10 @@ export default function JobStateTransitioner({
   const [pendingTransition, setPendingTransition] = useState(null);
   const [toolCheckOpen, setToolCheckOpen] = useState(false);
   const [enRouteEtaOpen, setEnRouteEtaOpen] = useState(false);
+  const [checkInOpen, setCheckInOpen] = useState(false);
   const pendingAfterToolCheckRef = useRef(null);
   const pendingEnRouteRef = useRef(null);
+  const pendingCheckInRef = useRef(null);
   const qc = useQueryClient();
 
   /*
@@ -77,6 +85,7 @@ export default function JobStateTransitioner({
         job,
         user,
         evidence,
+        timeEntries,
         toStatus,
         fromStatus: priorStatus ?? job.status,
         isOverride,
@@ -118,6 +127,12 @@ export default function JobStateTransitioner({
       return;
     }
 
+    if (toStatus === 'checked_in' && !isOverride) {
+      pendingCheckInRef.current = { toStatus, isOverride, priorStatus: currentStatus };
+      setCheckInOpen(true);
+      return;
+    }
+
     const needsToolCheck =
       toStatus === 'in_progress' && !isOverride && currentStatus !== 'paused';
 
@@ -144,15 +159,28 @@ export default function JobStateTransitioner({
     if (p) transitionMutation.mutate(p);
   };
 
-  const completeEnRouteEtaAck = (ts) => {
-    setEnRouteEtaOpen(false);
+  const completeEnRouteEtaAck = async (ts) => {
     const p = pendingEnRouteRef.current;
-    pendingEnRouteRef.current = null;
-    if (p) {
-      transitionMutation.mutate({
+    if (!p) return;
+    try {
+      await transitionMutation.mutateAsync({
         ...p,
         dispatchOverrides: { eta_ack_timestamp: ts },
       });
+      pendingEnRouteRef.current = null;
+    } catch {
+      /* pending ref kept for retry; toast via mutation onError */
+    }
+  };
+
+  const completeOnSiteCheckIn = async () => {
+    const p = pendingCheckInRef.current;
+    if (!p) return;
+    try {
+      await transitionMutation.mutateAsync(p);
+      pendingCheckInRef.current = null;
+    } catch {
+      /* pending ref kept for retry; toast via mutation onError */
     }
   };
 
@@ -165,9 +193,19 @@ export default function JobStateTransitioner({
           if (!o) pendingEnRouteRef.current = null;
         }}
         jobLabel={job?.title}
-        title="Start route"
-        description="Confirm you have reviewed ETA / dispatch details before marking en route."
+        title="Head to site"
+        description="Confirms ETA and dispatch, records travel start, sets en route. Work timer stays off until after check-in."
         onConfirm={(ts) => completeEnRouteEtaAck(ts)}
+      />
+
+      <OnSiteCheckInSheet
+        open={checkInOpen}
+        onOpenChange={(o) => {
+          setCheckInOpen(o);
+          if (!o) pendingCheckInRef.current = null;
+        }}
+        jobLabel={job?.title}
+        onConfirm={() => completeOnSiteCheckIn()}
       />
 
       <PreJobToolCheckModal
@@ -232,6 +270,9 @@ export default function JobStateTransitioner({
                     </p>
                     {to === 'en_route' ? (
                       <p className={cn(FIELD_META, 'mb-2 leading-snug')}>{READINESS_HINT_EN_ROUTE}</p>
+                    ) : null}
+                    {to === 'checked_in' ? (
+                      <p className={cn(FIELD_META, 'mb-2 leading-snug')}>{READINESS_HINT_CHECK_IN}</p>
                     ) : null}
                     {to === 'in_progress' && currentStatus !== 'paused' ? (
                       <p className={cn(FIELD_META, 'mb-2 leading-snug')}>{READINESS_HINT_START_WORK}</p>

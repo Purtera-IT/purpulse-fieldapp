@@ -1,12 +1,16 @@
 /**
- * Iteration 5a: embedded site map (static pin) + Open in Maps fallback.
- * Uses react-leaflet; does not use live GPS — only job.site_lat / site_lon.
+ * Iteration 5a / 16: embedded site map (static pin) + Open in Maps from work-order data only.
+ * Uses react-leaflet; does not use live GPS — only job.site_lat / site_lon and/or site_address.
  */
 import React, { useEffect } from 'react';
 import L from 'leaflet';
 import { MapContainer, TileLayer, Marker } from 'react-leaflet';
 import { MapPin, Navigation, ExternalLink } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import {
+  buildSiteOpenInMapsUrl,
+  parseSiteCoordinate,
+} from '@/lib/siteOpenInMapsUrl';
 
 import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
 import markerIcon from 'leaflet/dist/images/marker-icon.png';
@@ -24,17 +28,6 @@ function fixLeafletDefaultIcons() {
   });
 }
 
-function mapsHref(job) {
-  if (!job?.site_address) return null;
-  return `https://maps.google.com/maps?q=${encodeURIComponent(job.site_address)}`;
-}
-
-function parseCoord(v) {
-  if (v == null || v === '') return null;
-  const n = typeof v === 'number' ? v : Number(v);
-  return Number.isFinite(n) ? n : null;
-}
-
 /**
  * @param {Object} props
  * @param {Record<string, unknown>} props.job
@@ -50,10 +43,10 @@ export default function JobSiteMap({
   dense = false,
   scrollWheelZoom = false,
 }) {
-  const lat = parseCoord(job?.site_lat);
-  const lon = parseCoord(job?.site_lon);
+  const lat = parseSiteCoordinate(job?.site_lat);
+  const lon = parseSiteCoordinate(job?.site_lon);
   const hasCoords = lat != null && lon != null;
-  const href = mapsHref(job);
+  const href = buildSiteOpenInMapsUrl(job);
 
   useEffect(() => {
     if (hasCoords) fixLeafletDefaultIcons();
@@ -75,6 +68,11 @@ export default function JobSiteMap({
     </a>
   ) : null;
 
+  const footerLabel = job?.site_address || job?.site_name || null;
+  const hasStreetAddress = Boolean(job?.site_address?.trim());
+  const nameOnlyNoPin =
+    !hasCoords && !hasStreetAddress && Boolean(job?.site_name?.trim());
+
   if (!hasCoords) {
     return (
       <div className={cn('rounded-xl border border-slate-200 bg-slate-50 overflow-hidden', className)}>
@@ -82,14 +80,17 @@ export default function JobSiteMap({
           <div className="flex items-start gap-2 text-slate-600">
             <MapPin className={cn('text-slate-400 flex-shrink-0 mt-0.5', dense ? 'h-4 w-4' : 'h-5 w-5')} />
             <div className="min-w-0 text-sm">
-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
-                No map coordinates
+              <p className="text-xs text-slate-700 leading-snug font-medium">
+                Site pin needs latitude/longitude on the job.
               </p>
-              {job?.site_address ? (
-                <p className="font-semibold text-slate-700 leading-snug">{job.site_address}</p>
-              ) : (
-                <p className="text-xs text-slate-500">Add site latitude/longitude on the job to show a pin.</p>
-              )}
+              {footerLabel ? (
+                <p className="text-xs text-slate-600 mt-1.5 leading-snug break-words">{footerLabel}</p>
+              ) : null}
+              {nameOnlyNoPin ? (
+                <p className="text-[11px] text-slate-500 mt-1.5 leading-snug">
+                  Add a site address on the work order to open directions.
+                </p>
+              ) : null}
             </div>
           </div>
           {openMapsBtn}
@@ -123,13 +124,25 @@ export default function JobSiteMap({
           <Marker position={center} />
         </MapContainer>
       </div>
-      {(openMapsBtn || job?.site_address) && (
-        <div className={cn('flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-3 py-2', dense && 'px-2 py-1.5')}>
-          {job?.site_address && (
-            <p className={cn('text-slate-600 truncate flex-1 min-w-0', dense ? 'text-[10px]' : 'text-xs')}>
-              {job.site_address}
-            </p>
+      {(openMapsBtn || footerLabel) && (
+        <div
+          className={cn(
+            'flex flex-wrap items-center gap-2 border-t border-slate-200 bg-white px-3 py-2',
+            dense && 'px-2 py-1.5',
+            footerLabel ? 'justify-between' : 'justify-end'
           )}
+        >
+          {footerLabel ? (
+            <p
+              className={cn(
+                'text-slate-600 flex-1 min-w-0 line-clamp-2',
+                dense ? 'text-[10px]' : 'text-xs'
+              )}
+              title={typeof footerLabel === 'string' ? footerLabel : undefined}
+            >
+              {footerLabel}
+            </p>
+          ) : null}
           {openMapsBtn}
         </div>
       )}

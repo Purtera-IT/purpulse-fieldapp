@@ -1,0 +1,661 @@
+diff --git a/build-changes/README.md b/build-changes/README.md
+index f285e6b..3ac3f3e 100644
+--- a/build-changes/README.md
++++ b/build-changes/README.md
+@@ -929,6 +929,167 @@ git apply build-changes/iteration-14-canonical-events.patch
+ 
+ ---
+ 
++## Iteration 15 — Canonical travel + arrival hardening
++
++**Dispatch → travel/arrival → Job.update:** [`jobStateTransitionMutation.ts`](../src/lib/jobStateTransitionMutation.ts) — after `emitDispatchEventForJobStatusChange`, **`travel_event` (`travel_start`)** (+ optional consent GPS) and **`travel_start` TimeEntry** on **assigned → en_route**; on **checked_in**, **`travel_end` + `arrival_event`** when an open travel segment exists in `timeEntries`, else **`emitArrivalForClockIn`**, plus optional **`travel_end` TimeEntry**.
++
++**UI:** [`JobStateTransitioner.jsx`](../src/components/fieldv2/JobStateTransitioner.jsx) — `timeEntries` from [`JobOverview.jsx`](../src/components/fieldv2/JobOverview.jsx); [`OnSiteCheckInSheet`](../src/components/field/AcknowledgementSheets.jsx) for en_route → checked_in; ETA/route copy; readiness hints. Copy updates in [`fieldReadinessViewModel.ts`](../src/lib/fieldReadinessViewModel.ts), [`jobStateMachine.ts`](../src/lib/jobStateMachine.ts), [`fieldJobExecutionModel.ts`](../src/lib/fieldJobExecutionModel.ts), [`FieldTimeTracker.jsx`](../src/components/fieldv2/FieldTimeTracker.jsx). [`computeOpenTravelMinutesForJob`](../src/lib/travelArrivalEvent.js) uses string-coerced `job_id` matching.
++
++**Registry:** [`canonicalFieldEventCoverage.ts`](../src/lib/canonicalFieldEventCoverage.ts) — travel/arrival v2 surfaces updated.
++
++### Changed file list
++
++**Modified**
++
++- `src/lib/jobStateTransitionMutation.ts`
++- `src/lib/travelArrivalEvent.js`
++- `src/components/fieldv2/JobStateTransitioner.jsx`
++- `src/components/fieldv2/JobOverview.jsx`
++- `src/components/field/AcknowledgementSheets.jsx`
++- `src/components/fieldv2/FieldTimeTracker.jsx`
++- `src/lib/fieldReadinessViewModel.ts`
++- `src/lib/jobStateMachine.ts`
++- `src/lib/fieldJobExecutionModel.ts`
++- `src/lib/canonicalFieldEventCoverage.ts`
++- `src/lib/__tests__/jobStateTransitionMutation.test.ts`
++- `build-changes/README.md`
++
++### Patch
++
++**[`iteration-15-travel-arrival.patch`](./iteration-15-travel-arrival.patch)**
++
++Re-generate from the **repository root**:
++
++```bash
++git diff HEAD -- \
++  src/components/field/AcknowledgementSheets.jsx \
++  src/components/fieldv2/FieldTimeTracker.jsx \
++  src/components/fieldv2/JobOverview.jsx \
++  src/components/fieldv2/JobStateTransitioner.jsx \
++  src/lib/__tests__/jobStateTransitionMutation.test.ts \
++  src/lib/canonicalFieldEventCoverage.ts \
++  src/lib/fieldJobExecutionModel.ts \
++  src/lib/fieldReadinessViewModel.ts \
++  src/lib/jobStateMachine.ts \
++  src/lib/jobStateTransitionMutation.ts \
++  src/lib/travelArrivalEvent.js \
++  build-changes/README.md \
++  > build-changes/iteration-15-travel-arrival.patch
++```
++
++### How to use the patch
++
++```bash
++git apply --check build-changes/iteration-15-travel-arrival.patch
++git apply build-changes/iteration-15-travel-arrival.patch
++```
++
++### Iteration 15.1 — Cleanup (pre–Iteration 16)
++
++- **Sheets:** `EtaAcknowledgementSheet` and `OnSiteCheckInSheet` **await** `onConfirm` and close only after success; `JobStateTransitioner` uses **`mutateAsync`** for those microflows so failures keep the sheet open for retry (toast still from mutation `onError`).
++- **Docs:** [`jobStateTransitionMutation.ts`](../src/lib/jobStateTransitionMutation.ts) module header documents **travel_start scope** (assigned → en_route only) and the **intentional dual check-in arrival path**; [`canonicalFieldEventCoverage.ts`](../src/lib/canonicalFieldEventCoverage.ts) notes cross-reference.
++- **UX:** Shorter lifecycle copy in transitioner / overview / sheets; sheets use **`max-h-[85vh] overflow-y-auto`** for small screens. Optional travel GPS remains a **consent-gated one-shot sample**, not live tracking (see mutation + [`travelGps.js`](../src/lib/travelGps.js)).
++
++---
++
++## Iteration 16 — Consent-aware location + map P0/P1 (canonical v2)
++
++**P0 — Static site context:** [`JobOverview.jsx`](../src/components/fieldv2/JobOverview.jsx) embeds [`JobSiteMap.jsx`](../src/components/field/JobSiteMap.jsx) (lazy) when the job has site name, address, or coordinates; subordinate trust line that map/address are from the **work order**, not live device tracking. **Single** “Open in Maps” action lives in `JobSiteMap` footer (no duplicate header link, no separate address hyperlink in Overview).
++
++**URL helper:** [`siteOpenInMapsUrl.js`](../src/lib/siteOpenInMapsUrl.js) — `buildSiteOpenInMapsUrl(job)` prefers `site_lat`/`site_lon`, else `site_address`; fixes coords-with-no-address (previously no external maps button). Tests: [`siteOpenInMapsUrl.test.ts`](../src/lib/__tests__/siteOpenInMapsUrl.test.ts).
++
++**P1 — Travel-start honesty:** [`EtaAcknowledgementSheet`](../src/components/field/AcknowledgementSheets.jsx) — one-line footnote from [`getLocationConsentState`](../src/lib/locationConsent.js) (granted vs not). No onboarding changes ([`LocationConsentStep.jsx`](../src/components/onboarding/LocationConsentStep.jsx) = Iteration 17).
++
++### Changed file list
++
++**New**
++
++- `src/lib/siteOpenInMapsUrl.js`
++- `src/lib/__tests__/siteOpenInMapsUrl.test.ts`
++
++**Modified**
++
++- `src/components/field/JobSiteMap.jsx`
++- `src/components/fieldv2/JobOverview.jsx`
++- `src/components/field/AcknowledgementSheets.jsx`
++- `build-changes/README.md`
++
++### Patch
++
++**[`iteration-16-location-maps.patch`](./iteration-16-location-maps.patch)**
++
++Re-generate from the **repository root** (include new files with `git add` first, or append `git diff --no-index /dev/null` hunks for untracked files):
++
++```bash
++git diff HEAD -- \
++  src/components/field/JobSiteMap.jsx \
++  src/components/fieldv2/JobOverview.jsx \
++  src/components/field/AcknowledgementSheets.jsx \
++  src/lib/siteOpenInMapsUrl.js \
++  src/lib/__tests__/siteOpenInMapsUrl.test.ts \
++  build-changes/README.md \
++  > build-changes/iteration-16-location-maps.patch
++```
++
++### How to use the patch
++
++```bash
++git apply --check build-changes/iteration-16-location-maps.patch
++git apply build-changes/iteration-16-location-maps.patch
++```
++
++---
++
++## Iteration 17 — Artifact persistence maturity (canonical v2)
++
++**Goal:** One presentation model ([`artifactPersistencePresentation.ts`](../src/lib/artifactPersistencePresentation.ts)) maps `status` + `file_url` (+ optional `azure_blob_url`) to compact operator copy (Saved on job / Preview only / Link on job / Waiting to sync / Needs attention). [`fieldEvidenceViewModel.ts`](../src/lib/fieldEvidenceViewModel.ts) delegates `getEvidenceStatusPresentation` and `getStorageNoteForFileUrl` to it.
++
++**Canonical UI:** [`EvidenceGalleryView.jsx`](../src/components/fieldv2/EvidenceGalleryView.jsx) — **On this job** block (headline + detail), **QC review** block separate; no duplicate storage paragraph. [`EvidenceCaptureModal.jsx`](../src/components/fieldv2/EvidenceCaptureModal.jsx) done state uses the same `headline` / `detailLine` as the helper. Requirement counts unchanged; one-line meta explains met counts include previews while sync catches up.
++
++**Tests:** [`artifactPersistencePresentation.test.ts`](../src/lib/__tests__/artifactPersistencePresentation.test.ts)
++
++### Changed file list
++
++**New**
++
++- `src/lib/artifactPersistencePresentation.ts`
++- `src/lib/__tests__/artifactPersistencePresentation.test.ts`
++
++**Modified**
++
++- `src/lib/fieldEvidenceViewModel.ts`
++- `src/components/fieldv2/EvidenceGalleryView.jsx`
++- `src/components/fieldv2/EvidenceCaptureModal.jsx`
++- `build-changes/README.md`
++
++### Patch
++
++**[`iteration-17-artifact-persistence.patch`](./iteration-17-artifact-persistence.patch)**
++
++Re-generate from the **repository root**:
++
++```bash
++git diff HEAD -- \
++  src/lib/artifactPersistencePresentation.ts \
++  src/lib/__tests__/artifactPersistencePresentation.test.ts \
++  src/lib/fieldEvidenceViewModel.ts \
++  src/components/fieldv2/EvidenceGalleryView.jsx \
++  src/components/fieldv2/EvidenceCaptureModal.jsx \
++  build-changes/README.md \
++  > build-changes/iteration-17-artifact-persistence.patch
++```
++
++(For untracked new files at generation time, append `git diff --no-index /dev/null <path>` hunks.)
++
++### How to use the patch
++
++```bash
++git apply --check build-changes/iteration-17-artifact-persistence.patch
++git apply build-changes/iteration-17-artifact-persistence.patch
++```
++
++---
++
+ ## Adding future iterations
+ 
+ 1. Create `iteration-N-<short-name>.patch` using a scoped `git diff` (and `git diff --no-index` for new files if needed).
+diff --git a/src/components/fieldv2/EvidenceGalleryView.jsx b/src/components/fieldv2/EvidenceGalleryView.jsx
+index c3fa293..ed8cce1 100644
+--- a/src/components/fieldv2/EvidenceGalleryView.jsx
++++ b/src/components/fieldv2/EvidenceGalleryView.jsx
+@@ -12,11 +12,11 @@ import EvidenceCaptureModal from './EvidenceCaptureModal';
+ import LabelerModal from './LabelerModal';
+ import {
+   assignEvidenceToRequirements,
++  getArtifactPersistencePresentation,
+   getEvidenceStatusPresentation,
+   groupEvidenceByStepOrJob,
+   partitionEvidenceForRequirements,
+   resolveRunbookStepTitle,
+-  getStorageNoteForFileUrl,
+ } from '@/lib/fieldEvidenceViewModel';
+ import {
+   getEvidenceQcPresentation,
+@@ -59,6 +59,9 @@ function EvidenceRequirementsPanel({ job, evidence, onAddForRequirement }) {
+       <p className={cn(FIELD_OVERLINE, 'mb-3')}>
+         Required vs uploaded
+       </p>
++      <p className={cn(FIELD_META, 'mb-3 leading-snug')}>
++        Counts use saved-on-job rows (previews count while sync catches up).
++      </p>
+       <ul className="space-y-2">
+         {rows.map(({ req, min, uploaded, inFlight, met, unmet }, i) => (
+           <li
+@@ -111,12 +114,12 @@ function EvidenceQcSummaryStrip({ evidence }) {
+   if (r.uploadedCount === 0) return null;
+   return (
+     <div className={cn(FIELD_CARD, 'p-3 mb-4 border border-slate-200')}>
+-      <p className={cn(FIELD_OVERLINE, 'mb-1')}>QC on saved files</p>
++      <p className={cn(FIELD_OVERLINE, 'mb-1')}>QC on items saved on job</p>
+       <p className="text-xs font-semibold text-slate-800 tabular-nums">
+         {r.passCount} passed · {r.failCount} failed · {r.pendingCount} not reviewed
+       </p>
+       <p className={cn(FIELD_META, 'mt-2 leading-snug')}>
+-        Saved means the file is attached to the job. QC pass/fail is a separate review outcome.
++        Saved on job means the evidence row is on this work order. QC pass/fail is a separate review outcome.
+       </p>
+     </div>
+   );
+@@ -196,8 +199,8 @@ function DetailModal({ ev, job, onClose, onLabel, onQC, onAddReplacement }) {
+   const isImg = ev.content_type?.startsWith('image');
+   const qcPres = getEvidenceQcPresentation(ev);
+   const st = getEvidenceStatusPresentation(ev);
++  const artifact = getArtifactPersistencePresentation(ev);
+   const stepTitle = resolveRunbookStepTitle(job, ev.runbook_step_id);
+-  const storageNote = getStorageNoteForFileUrl(ev.file_url);
+ 
+   return (
+     <div
+@@ -231,19 +234,16 @@ function DetailModal({ ev, job, onClose, onLabel, onQC, onAddReplacement }) {
+           )}
+ 
+           <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-2">
+-            <p className={cn(FIELD_OVERLINE, 'text-[10px]')}>Two different things</p>
++            <p className={cn(FIELD_OVERLINE, 'text-[10px]')}>On this job</p>
++            <p className="text-sm font-semibold text-slate-900">{artifact.headline}</p>
++            {artifact.detailLine ? (
++              <p className={cn(FIELD_META, 'leading-snug')}>{artifact.detailLine}</p>
++            ) : null}
++          </div>
++
++          <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-2">
++            <p className={cn(FIELD_OVERLINE, 'text-[10px]')}>QC review</p>
+             <div className="flex flex-wrap items-center gap-2">
+-              <div
+-                className={cn(
+-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border',
+-                  st.tone === 'ok' && 'bg-white border-emerald-200 text-emerald-900',
+-                  st.tone === 'pending' && 'bg-white border-amber-200 text-amber-950',
+-                  st.tone === 'error' && 'bg-white border-red-200 text-red-900',
+-                  st.tone === 'muted' && 'bg-white border-slate-200 text-slate-700',
+-                )}
+-              >
+-                File on job: {st.shortLabel}
+-              </div>
+               <div
+                 className={cn(
+                   'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white',
+@@ -322,12 +322,6 @@ function DetailModal({ ev, job, onClose, onLabel, onQC, onAddReplacement }) {
+             </div>
+           </div>
+ 
+-          {storageNote && (
+-            <p className={cn(FIELD_BODY, 'bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2')}>
+-              {storageNote}
+-            </p>
+-          )}
+-
+           <div>
+             <p className={cn(FIELD_OVERLINE, 'mb-2')}>Metadata</p>
+             <table className="w-full">
+diff --git a/src/lib/fieldEvidenceViewModel.ts b/src/lib/fieldEvidenceViewModel.ts
+index 71fd8a5..e3a0915 100644
+--- a/src/lib/fieldEvidenceViewModel.ts
++++ b/src/lib/fieldEvidenceViewModel.ts
+@@ -3,6 +3,10 @@
+  * Does not invent backend fields — only projects what the job + evidence already provide.
+  */
+ 
++import { getArtifactPersistencePresentation } from '@/lib/artifactPersistencePresentation'
++
++export { getArtifactPersistencePresentation }
++
+ export const FALLBACK_EVIDENCE_TYPES = [
+   'before_photo',
+   'after_photo',
+@@ -18,6 +22,8 @@ export type EvidenceLike = {
+   evidence_type?: string
+   status?: EvidenceStatus | string
+   file_url?: string
++  /** Optional; when present, still use conservative remote wording (no extra durability claim). */
++  azure_blob_url?: string | null
+   runbook_step_id?: string
+   upload_error?: string
+   /** Backend string; normalize with `normalizeEvidenceQcStatus` in evidenceQcViewModel */
+@@ -91,55 +97,25 @@ export function getEvidenceStatusPresentation(ev: EvidenceLike): {
+   shortLabel: string
+   tone: 'ok' | 'pending' | 'error' | 'muted'
+ } {
+-  const status = ev.status as EvidenceStatus | undefined
+-  const err = ev.upload_error?.trim()
+-
+-  if (status === 'error') {
+-    return {
+-      label: err ? `Failed — ${err}` : 'Failed',
+-      shortLabel: 'Failed',
+-      tone: 'error',
+-    }
+-  }
+-  if (status === 'pending_upload') {
+-    return { label: 'Pending upload', shortLabel: 'Pending', tone: 'pending' }
+-  }
+-  if (status === 'uploading') {
+-    return { label: 'Uploading', shortLabel: 'Uploading', tone: 'pending' }
+-  }
+-  if (status === 'replaced') {
+-    return { label: 'Replaced', shortLabel: 'Replaced', tone: 'muted' }
+-  }
+-  if (status === 'uploaded') {
+-    const url = ev.file_url || ''
+-    if (url.startsWith('data:')) {
+-      return {
+-        label: 'Preview on job · sync may be pending',
+-        shortLabel: 'Preview',
+-        tone: 'pending',
+-      }
+-    }
+-    if (url.startsWith('mock://')) {
+-      return {
+-        label: 'Saved on job · storage sync pending',
+-        shortLabel: 'Pending sync',
+-        tone: 'pending',
+-      }
+-    }
+-    return { label: 'Available', shortLabel: 'Saved', tone: 'ok' }
++  const a = getArtifactPersistencePresentation(ev)
++  return {
++    label: a.summaryLine,
++    shortLabel: a.badgeShort,
++    tone: a.badgeTone,
+   }
+-  return { label: status || 'Unknown', shortLabel: status || '—', tone: 'muted' }
+ }
+ 
++/**
++ * Compatibility shim only — returns `detailLine` for a synthetic uploaded row. Prefer
++ * `getArtifactPersistencePresentation` for real evidence objects. Do not extend this API.
++ */
+ export function getStorageNoteForFileUrl(fileUrl: string | null | undefined): string | null {
+-  if (!fileUrl) return null
+-  if (fileUrl.startsWith('data:')) {
+-    return 'Saved on this job as a preview. Storage sync may still be pending.'
+-  }
+-  if (fileUrl.startsWith('mock://')) {
+-    return 'Saved on this job. Storage sync is still pending.'
+-  }
+-  return null
++  const a = getArtifactPersistencePresentation({
++    id: '',
++    status: 'uploaded',
++    file_url: fileUrl ?? '',
++  })
++  return a.detailLine
+ }
+ 
+ export type RequirementPartitionRow = {
+@@ -151,6 +127,7 @@ export type RequirementPartitionRow = {
+   unmet: number
+ }
+ 
++/** `uploaded` count = `status === 'uploaded'` only — excludes pending_upload / uploading rows. */
+ export function partitionEvidenceForRequirements(
+   job: { evidence_requirements?: EvidenceRequirementLike[] } | null | undefined,
+   evidence: EvidenceLike[],
+diff --git a/src/lib/artifactPersistencePresentation.ts b/src/lib/artifactPersistencePresentation.ts
+new file mode 100644
+index 0000000..62ad072
+--- /dev/null
++++ b/src/lib/artifactPersistencePresentation.ts
+@@ -0,0 +1,168 @@
++/**
++ * Iteration 17: single operator-facing model for evidence record vs file reference vs sync honesty.
++ * Compact vocabulary only — does not invent backend durability guarantees.
++ */
++
++export type EvidencePersistenceStatus =
++  | 'pending_upload'
++  | 'uploading'
++  | 'uploaded'
++  | 'error'
++  | 'replaced'
++  | string
++
++export type EvidencePersistenceInput = {
++  id?: string
++  status?: EvidencePersistenceStatus
++  file_url?: string
++  upload_error?: string
++  azure_blob_url?: string | null
++}
++
++export type ArtifactTone = 'ok' | 'pending' | 'error' | 'muted'
++
++/** Compact operator phrases (badge + headlines). Avoid implying full durability, QC, or archive. */
++export const ARTIFACT_VOCAB = {
++  savedOnJob: 'Saved on job',
++  previewOnly: 'Preview only',
++  /** https / remote file reference on the record — not “fully processed” or review-ready. */
++  linkOnJob: 'Link on job',
++  waitingToSync: 'Waiting to sync',
++  needsAttention: 'Needs attention',
++} as const
++
++export type ArtifactPersistencePresentation = {
++  recordOnJob: boolean
++  headline: string
++  /** One line; null when nothing more to say (e.g. replaced). */
++  detailLine: string | null
++  badgeShort: string
++  badgeTone: ArtifactTone
++  /** Tooltip / metadata: headline · detail when detail present. */
++  summaryLine: string
++}
++
++type FileRefKind = 'inline_preview' | 'simulated' | 'remote_url' | 'missing'
++
++function classifyFileRef(fileUrl: string | undefined): FileRefKind {
++  const u = fileUrl || ''
++  if (!u) return 'missing'
++  if (u.startsWith('data:') || u.startsWith('blob:')) return 'inline_preview'
++  if (u.startsWith('mock://')) return 'simulated'
++  if (/^https?:\/\//i.test(u)) return 'remote_url'
++  return 'remote_url'
++}
++
++/**
++ * Canonical presentation for an evidence row + file URL shape.
++ * `azure_blob_url` does not strengthen durability claims — never treat as “fully uploaded everywhere.”
++ */
++export function getArtifactPersistencePresentation(ev: EvidencePersistenceInput): ArtifactPersistencePresentation {
++  const status = ev.status
++  const err = ev.upload_error?.trim()
++
++  if (status === 'error') {
++    const headline = ARTIFACT_VOCAB.needsAttention
++    const detailLine = err || 'Save or transfer failed.'
++    return {
++      recordOnJob: false,
++      headline,
++      detailLine,
++      badgeShort: ARTIFACT_VOCAB.needsAttention,
++      badgeTone: 'error',
++      summaryLine: err ? `${headline} · ${err}` : headline,
++    }
++  }
++
++  if (status === 'pending_upload') {
++    return {
++      recordOnJob: false,
++      headline: ARTIFACT_VOCAB.waitingToSync,
++      detailLine: 'File transfer not finished yet.',
++      badgeShort: ARTIFACT_VOCAB.waitingToSync,
++      badgeTone: 'pending',
++      summaryLine: `${ARTIFACT_VOCAB.waitingToSync} · File transfer not finished yet.`,
++    }
++  }
++
++  if (status === 'uploading') {
++    return {
++      recordOnJob: false,
++      headline: ARTIFACT_VOCAB.waitingToSync,
++      detailLine: 'Sending file…',
++      badgeShort: ARTIFACT_VOCAB.waitingToSync,
++      badgeTone: 'pending',
++      summaryLine: `${ARTIFACT_VOCAB.waitingToSync} · Sending file…`,
++    }
++  }
++
++  if (status === 'replaced') {
++    return {
++      recordOnJob: true,
++      headline: 'Replaced',
++      detailLine: null,
++      badgeShort: 'Replaced',
++      badgeTone: 'muted',
++      summaryLine: 'Replaced',
++    }
++  }
++
++  if (status !== 'uploaded') {
++    const s = status ? String(status) : 'Unknown'
++    return {
++      recordOnJob: false,
++      headline: s,
++      detailLine: null,
++      badgeShort: s.slice(0, 12),
++      badgeTone: 'muted',
++      summaryLine: s,
++    }
++  }
++
++  const kind = classifyFileRef(ev.file_url)
++  const pendingDetail = 'File transfer or storage sync may still be pending.'
++
++  if (kind === 'missing') {
++    return {
++      recordOnJob: true,
++      headline: ARTIFACT_VOCAB.savedOnJob,
++      detailLine: 'No file link on the record yet.',
++      badgeShort: ARTIFACT_VOCAB.waitingToSync,
++      badgeTone: 'pending',
++      summaryLine: `${ARTIFACT_VOCAB.savedOnJob} · No file link on the record yet.`,
++    }
++  }
++
++  if (kind === 'inline_preview') {
++    return {
++      recordOnJob: true,
++      headline: ARTIFACT_VOCAB.savedOnJob,
++      detailLine: `${ARTIFACT_VOCAB.previewOnly}. ${pendingDetail}`,
++      badgeShort: ARTIFACT_VOCAB.previewOnly,
++      badgeTone: 'pending',
++      summaryLine: `${ARTIFACT_VOCAB.savedOnJob} · ${ARTIFACT_VOCAB.previewOnly}. ${pendingDetail}`,
++    }
++  }
++
++  if (kind === 'simulated') {
++    return {
++      recordOnJob: true,
++      headline: ARTIFACT_VOCAB.savedOnJob,
++      detailLine: pendingDetail,
++      badgeShort: ARTIFACT_VOCAB.waitingToSync,
++      badgeTone: 'pending',
++      summaryLine: `${ARTIFACT_VOCAB.savedOnJob} · ${pendingDetail}`,
++    }
++  }
++
++  // remote_url (https etc.) — link on record; not QC-complete, fully processed, or archived
++  const remoteDetail = 'Link only. Further sync or processing may still be pending.'
++  return {
++    recordOnJob: true,
++    headline: ARTIFACT_VOCAB.savedOnJob,
++    detailLine: remoteDetail,
++    badgeShort: ARTIFACT_VOCAB.linkOnJob,
++    badgeTone: 'ok',
++    summaryLine: `${ARTIFACT_VOCAB.savedOnJob} · ${remoteDetail}`,
++  }
++}
+diff --git a/src/lib/__tests__/artifactPersistencePresentation.test.ts b/src/lib/__tests__/artifactPersistencePresentation.test.ts
+new file mode 100644
+index 0000000..9f3b6d1
+--- /dev/null
++++ b/src/lib/__tests__/artifactPersistencePresentation.test.ts
+@@ -0,0 +1,112 @@
++import { describe, expect, it } from 'vitest'
++import {
++  getArtifactPersistencePresentation,
++  ARTIFACT_VOCAB,
++} from '@/lib/artifactPersistencePresentation'
++
++describe('getArtifactPersistencePresentation', () => {
++  it('pending_upload', () => {
++    const a = getArtifactPersistencePresentation({
++      id: '1',
++      status: 'pending_upload',
++      file_url: 'https://example.com/a.jpg',
++    })
++    expect(a.recordOnJob).toBe(false)
++    expect(a.badgeShort).toBe(ARTIFACT_VOCAB.waitingToSync)
++    expect(a.badgeTone).toBe('pending')
++  })
++
++  it('uploading', () => {
++    const a = getArtifactPersistencePresentation({
++      id: '1',
++      status: 'uploading',
++    })
++    expect(a.recordOnJob).toBe(false)
++    expect(a.headline).toBe(ARTIFACT_VOCAB.waitingToSync)
++  })
++
++  it('error with message', () => {
++    const a = getArtifactPersistencePresentation({
++      id: '1',
++      status: 'error',
++      upload_error: 'Network timeout',
++    })
++    expect(a.recordOnJob).toBe(false)
++    expect(a.badgeShort).toBe(ARTIFACT_VOCAB.needsAttention)
++    expect(a.detailLine).toContain('Network')
++  })
++
++  it('replaced', () => {
++    const a = getArtifactPersistencePresentation({
++      id: '1',
++      status: 'replaced',
++      file_url: 'https://example.com/a.jpg',
++    })
++    expect(a.recordOnJob).toBe(true)
++    expect(a.detailLine).toBeNull()
++    expect(a.badgeTone).toBe('muted')
++  })
++
++  it('uploaded + data URL → preview only', () => {
++    const a = getArtifactPersistencePresentation({
++      id: '1',
++      status: 'uploaded',
++      file_url: 'data:image/png;base64,abc',
++    })
++    expect(a.recordOnJob).toBe(true)
++    expect(a.badgeShort).toBe(ARTIFACT_VOCAB.previewOnly)
++    expect(a.detailLine).toContain('Preview only')
++    expect(a.detailLine).toContain('pending')
++  })
++
++  it('uploaded + mock:// → waiting to sync', () => {
++    const a = getArtifactPersistencePresentation({
++      id: '1',
++      status: 'uploaded',
++      file_url: 'mock://bucket/job/x.jpg',
++    })
++    expect(a.badgeShort).toBe(ARTIFACT_VOCAB.waitingToSync)
++    expect(a.badgeTone).toBe('pending')
++  })
++
++  it('uploaded + https → link on job, ok tone (not “fully processed”)', () => {
++    const a = getArtifactPersistencePresentation({
++      id: '1',
++      status: 'uploaded',
++      file_url: 'https://storage.example.com/a.jpg',
++    })
++    expect(a.badgeShort).toBe(ARTIFACT_VOCAB.linkOnJob)
++    expect(a.badgeTone).toBe('ok')
++    expect(a.headline).toBe(ARTIFACT_VOCAB.savedOnJob)
++    expect(a.detailLine).toMatch(/Link only|pending/i)
++  })
++
++  it('uploaded + https + azure_blob_url still conservative', () => {
++    const a = getArtifactPersistencePresentation({
++      id: '1',
++      status: 'uploaded',
++      file_url: 'https://storage.example.com/a.jpg',
++      azure_blob_url: 'https://blob.core.windows.net/c/a.jpg',
++    })
++    expect(a.badgeShort).toBe(ARTIFACT_VOCAB.linkOnJob)
++    expect(a.detailLine).toContain('pending')
++  })
++
++  it('uploaded + missing file_url', () => {
++    const a = getArtifactPersistencePresentation({
++      id: '1',
++      status: 'uploaded',
++    })
++    expect(a.badgeTone).toBe('pending')
++    expect(a.detailLine).toContain('No file link')
++  })
++
++  it('uploaded + blob: URL treated as preview', () => {
++    const a = getArtifactPersistencePresentation({
++      id: '1',
++      status: 'uploaded',
++      file_url: 'blob:http://localhost/550e8400-e29b-41d4-a716-446655440000',
++    })
++    expect(a.badgeShort).toBe(ARTIFACT_VOCAB.previewOnly)
++  })
++})

@@ -147,7 +147,7 @@ export default function FieldTimeTracker({
         <p className={cn(FIELD_BODY, 'mb-2')}>{executionView.sessionSummaryLine}</p>
         {canClockIn && !liveTimer.workSegmentOpen ? (
           <p className={cn(FIELD_META, 'mb-3 leading-snug')}>
-            Third of three readiness steps: starting the timer opens a short site check before work time is recorded.
+            After route, check-in, and start work: starting the timer runs a short on-site scope check, then records billable time only — not travel.
           </p>
         ) : null}
         <div className="flex gap-2">

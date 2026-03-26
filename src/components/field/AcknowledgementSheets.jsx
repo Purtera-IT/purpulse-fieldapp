@@ -11,12 +11,13 @@ import {
   SheetFooter,
 } from '@/components/ui/sheet';
 import { Button } from '@/components/ui/button';
-import { Loader2, ClipboardList, Route } from 'lucide-react';
+import { Loader2, ClipboardList, MapPin, Route } from 'lucide-react';
 import {
   SCOPE_ACKNOWLEDGEMENT_ITEMS,
   allScopeAcknowledgementsTrue,
   emptyScopeAcknowledgementState,
 } from '@/constants/scopeAcknowledgements';
+import { getLocationConsentState } from '@/lib/locationConsent';
 
 /**
  * Scope/readiness flags before starting the work timer or equivalent flows.
@@ -55,10 +56,11 @@ export function PreArrivalAckSheet({ open, onOpenChange, jobLabel, onConfirm }) 
             <div className="h-9 w-9 rounded-full bg-purple-50 flex items-center justify-center">
               <ClipboardList className="h-4 w-4 text-purple-600" />
             </div>
-            <SheetTitle className="text-base">Before you arrive</SheetTitle>
+            <SheetTitle className="text-base">Before billable work</SheetTitle>
           </div>
           <SheetDescription className="text-xs text-left leading-relaxed">
-            Confirm you have reviewed scope, risks, and site constraints before time starts on this job.
+            You are already checked in on site — this step is only before the work timer records billable time.
+            Confirm scope, risks, and site constraints; it does not replace travel or on-site check-in.
             {jobLabel ? <span className="block mt-1 font-semibold text-slate-700">{jobLabel}</span> : null}
           </SheetDescription>
         </SheetHeader>
@@ -97,6 +99,7 @@ export function PreArrivalAckSheet({ open, onOpenChange, jobLabel, onConfirm }) 
 
 /**
  * ETA / route acknowledgement before marking en route.
+ * `onConfirm` is awaited before the sheet closes; on failure the sheet stays open for retry.
  */
 export function EtaAcknowledgementSheet({
   open,
@@ -118,7 +121,7 @@ export function EtaAcknowledgementSheet({
     setPending(true);
     try {
       const ts = new Date().toISOString();
-      onConfirm?.(ts);
+      await Promise.resolve(onConfirm?.(ts));
       onOpenChange(false);
     } finally {
       setPending(false);
@@ -127,7 +130,7 @@ export function EtaAcknowledgementSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent side="bottom" className="rounded-t-3xl">
+      <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto">
         <SheetHeader className="text-left space-y-2 pb-2">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-full bg-cyan-50 flex items-center justify-center">
@@ -138,7 +141,7 @@ export function EtaAcknowledgementSheet({
           <SheetDescription className="text-xs text-left leading-relaxed">
             {description}
             <span className="block mt-2 text-slate-600">
-              First of three readiness steps on this job: route, then start work, then the work timer.
+              1/3: route → check-in → start work &amp; timer.
             </span>
             {jobLabel ? <span className="block mt-2 font-semibold text-slate-700">{jobLabel}</span> : null}
           </SheetDescription>
@@ -156,6 +159,12 @@ export function EtaAcknowledgementSheet({
           </span>
         </label>
 
+        <p className="text-[11px] text-slate-500 leading-snug px-0.5 pb-1">
+          {getLocationConsentState() === 'granted'
+            ? 'A single optional device location may be recorded for travel start.'
+            : 'Location access is off. Travel still works without device GPS.'}
+        </p>
+
         <SheetFooter className="flex-col sm:flex-col gap-2 pt-2">
           <Button
             className="w-full rounded-xl bg-cyan-600 hover:bg-cyan-700"
@@ -164,6 +173,77 @@ export function EtaAcknowledgementSheet({
           >
             {pending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
             Start travel
+          </Button>
+        </SheetFooter>
+      </SheetContent>
+    </Sheet>
+  );
+}
+
+/**
+ * Lightweight on-site check-in confirmation before job moves to checked in (canonical field v2).
+ * `onConfirm` is awaited before the sheet closes; on failure the sheet stays open for retry.
+ */
+export function OnSiteCheckInSheet({
+  open,
+  onOpenChange,
+  jobLabel,
+  onConfirm,
+}) {
+  const [ack, setAck] = useState(false);
+  const [pending, setPending] = useState(false);
+
+  useEffect(() => {
+    if (!open) setAck(false);
+  }, [open]);
+
+  const handleConfirm = async () => {
+    if (!ack) return;
+    setPending(true);
+    try {
+      await Promise.resolve(onConfirm?.());
+      onOpenChange(false);
+    } finally {
+      setPending(false);
+    }
+  };
+
+  return (
+    <Sheet open={open} onOpenChange={onOpenChange}>
+      <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto">
+        <SheetHeader className="text-left space-y-2 pb-2">
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 rounded-full bg-purple-50 flex items-center justify-center">
+              <MapPin className="h-4 w-4 text-purple-600" />
+            </div>
+            <SheetTitle className="text-base">On-site check-in</SheetTitle>
+          </div>
+          <SheetDescription className="text-xs text-left leading-relaxed">
+            Records that you are on site — not travel, not billable time. Next: Start work, then Start timer when you bill.
+            {jobLabel ? (
+              <span className="block mt-1 font-semibold text-slate-700">{jobLabel}</span>
+            ) : null}
+          </SheetDescription>
+        </SheetHeader>
+
+        <label className="flex items-start gap-2.5 text-xs text-slate-700 cursor-pointer py-3">
+          <input
+            type="checkbox"
+            checked={ack}
+            onChange={(e) => setAck(e.target.checked)}
+            className="mt-0.5 rounded border-slate-300"
+          />
+          <span className="leading-snug">I am on site (or at the agreed work location).</span>
+        </label>
+
+        <SheetFooter className="flex-col sm:flex-col gap-2 pt-2">
+          <Button
+            className="w-full rounded-xl bg-purple-600 hover:bg-purple-700"
+            disabled={!ack || pending}
+            onClick={() => void handleConfirm()}
+          >
+            {pending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
+            Record check-in
           </Button>
         </SheetFooter>
       </SheetContent>

@@ -1,9 +1,9 @@
 /**
  * JobOverview — Job context, lifecycle transitions (authoritative), work timer, site/contact.
  */
-import React from 'react';
+import React, { lazy, Suspense } from 'react';
 import {
-  MapPin, Phone, Mail, User, Clock, Building2,
+  Phone, Mail, User, Clock, Building2,
   AlertTriangle, FileText,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -18,10 +18,14 @@ import {
   FIELD_INNER_STACK,
   FIELD_LINK_PRIMARY,
   FIELD_LINK_SECONDARY,
+  FIELD_META,
   FIELD_META_MONO,
   FIELD_OVERLINE,
   FIELD_STACK_GAP,
 } from '@/lib/fieldVisualTokens';
+import { jobHasSiteCoordinates } from '@/lib/siteOpenInMapsUrl';
+
+const JobSiteMapLazy = lazy(() => import('@/components/field/JobSiteMap'));
 
 function InfoRow({ icon: Icon, label, children, href }) {
   const inner = (
@@ -58,6 +62,9 @@ export default function JobOverview({
   hasSignature,
 }) {
   const stat = LIFECYCLE_DISPLAY[job.status] || LIFECYCLE_DISPLAY.assigned;
+  const showSiteSection = Boolean(
+    job.site_name || job.site_address || jobHasSiteCoordinates(job)
+  );
 
   return (
     <div className={FIELD_STACK_GAP}>
@@ -113,10 +120,11 @@ export default function JobOverview({
           Job state
         </p>
         <p className="text-[11px] text-slate-500 mb-2 px-0.5 leading-snug">
-          Update travel, check-in, work, pause, and completion status here.
+          Route (ETA + travel) → check-in → start work → timer (billable only). Pause/complete in Job state.
         </p>
         <JobStateTransitioner
           job={job}
+          timeEntries={timeEntries}
           evidence={evidence}
           runbookComplete={runbookComplete}
           hasSignature={hasSignature}
@@ -157,22 +165,37 @@ export default function JobOverview({
         </div>
       </FieldSectionCard>
 
-      {(job.site_name || job.site_address) && (
+      {showSiteSection && (
         <FieldSectionCard title="Site">
-          <div className={FIELD_INNER_STACK}>
-            {job.site_name && <InfoRow icon={Building2} label="Site">{job.site_name}</InfoRow>}
-            {job.site_address && (
-              <InfoRow icon={MapPin} label="Address">
-                <a
-                  href={`https://maps.google.com/?q=${encodeURIComponent(job.site_address)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-blue-600"
-                >
-                  {job.site_address}
-                </a>
-              </InfoRow>
+          <p
+            className={cn(FIELD_META, 'text-[11px] mb-2 px-0.5 leading-snug')}
+          >
+            Map and address come from the work order—not your live location.
+          </p>
+          <div className={cn(FIELD_INNER_STACK, 'gap-3')}>
+            {job.site_name && (
+              <InfoRow icon={Building2} label="Site">{job.site_name}</InfoRow>
             )}
+            <Suspense
+              fallback={
+                <div
+                  className="h-[188px] rounded-xl border border-slate-200 bg-slate-100/80 flex items-center justify-center"
+                  aria-hidden
+                >
+                  <span className={cn(FIELD_META, 'text-[11px] text-slate-400')}>Loading map…</span>
+                </div>
+              }
+            >
+              <JobSiteMapLazy job={job} height={188} dense scrollWheelZoom={false} />
+            </Suspense>
+            {job.site_address?.trim() && jobHasSiteCoordinates(job) ? (
+              <div className="px-0.5 pt-1">
+                <p className={cn(FIELD_OVERLINE)}>Address</p>
+                <p className={cn(FIELD_BODY, 'text-slate-700 mt-0.5 break-words leading-snug')}>
+                  {job.site_address.trim()}
+                </p>
+              </div>
+            ) : null}
           </div>
         </FieldSectionCard>
       )}

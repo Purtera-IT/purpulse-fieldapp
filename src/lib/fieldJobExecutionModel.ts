@@ -176,7 +176,10 @@ export function buildFieldJobExecutionView(job: Job, timeEntries: TimeEntry[]): 
   if (job.status === 'paused') {
     clockInDisabledReason = 'Job is paused — resume work in Job state before using the work timer.'
   } else if (job.status === 'assigned' || job.status === 'en_route') {
-    clockInDisabledReason = 'Use Job state to go en route and check in before starting a work timer.'
+    clockInDisabledReason =
+      job.status === 'assigned'
+        ? 'Start route (ETA + travel) in Job state, then check in on site — the work timer is only for billable time after that.'
+        : 'Check in on site in Job state first — travel is separate from the work timer.'
   } else if (
     job.status === 'pending_closeout' ||
     job.status === 'submitted' ||
@@ -205,8 +208,11 @@ export function buildFieldJobExecutionView(job: Job, timeEntries: TimeEntry[]): 
     sessionSummaryLine = `Work timer running · ${formatWorkedDuration(timer.workedSeconds)} logged this job`
   } else if (job.status === 'in_progress' || job.status === 'checked_in') {
     sessionSummaryLine = 'No active work timer — start when you begin billable work on site.'
+  } else if (job.status === 'en_route') {
+    sessionSummaryLine =
+      'En route — work timer stays off until you check in on site, then start work, then start the timer for billable work.'
   } else {
-    sessionSummaryLine = 'Work timer unlocks after check-in / start work in Job state.'
+    sessionSummaryLine = 'Work timer unlocks after check-in and start work in Job state.'
   }
 
   return {

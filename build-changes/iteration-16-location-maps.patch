@@ -1,0 +1,611 @@
+diff --git a/build-changes/README.md b/build-changes/README.md
+index f285e6b..595d891 100644
+--- a/build-changes/README.md
++++ b/build-changes/README.md
+@@ -929,6 +929,117 @@ git apply build-changes/iteration-14-canonical-events.patch
+ 
+ ---
+ 
++## Iteration 15 — Canonical travel + arrival hardening
++
++**Dispatch → travel/arrival → Job.update:** [`jobStateTransitionMutation.ts`](../src/lib/jobStateTransitionMutation.ts) — after `emitDispatchEventForJobStatusChange`, **`travel_event` (`travel_start`)** (+ optional consent GPS) and **`travel_start` TimeEntry** on **assigned → en_route**; on **checked_in**, **`travel_end` + `arrival_event`** when an open travel segment exists in `timeEntries`, else **`emitArrivalForClockIn`**, plus optional **`travel_end` TimeEntry**.
++
++**UI:** [`JobStateTransitioner.jsx`](../src/components/fieldv2/JobStateTransitioner.jsx) — `timeEntries` from [`JobOverview.jsx`](../src/components/fieldv2/JobOverview.jsx); [`OnSiteCheckInSheet`](../src/components/field/AcknowledgementSheets.jsx) for en_route → checked_in; ETA/route copy; readiness hints. Copy updates in [`fieldReadinessViewModel.ts`](../src/lib/fieldReadinessViewModel.ts), [`jobStateMachine.ts`](../src/lib/jobStateMachine.ts), [`fieldJobExecutionModel.ts`](../src/lib/fieldJobExecutionModel.ts), [`FieldTimeTracker.jsx`](../src/components/fieldv2/FieldTimeTracker.jsx). [`computeOpenTravelMinutesForJob`](../src/lib/travelArrivalEvent.js) uses string-coerced `job_id` matching.
++
++**Registry:** [`canonicalFieldEventCoverage.ts`](../src/lib/canonicalFieldEventCoverage.ts) — travel/arrival v2 surfaces updated.
++
++### Changed file list
++
++**Modified**
++
++- `src/lib/jobStateTransitionMutation.ts`
++- `src/lib/travelArrivalEvent.js`
++- `src/components/fieldv2/JobStateTransitioner.jsx`
++- `src/components/fieldv2/JobOverview.jsx`
++- `src/components/field/AcknowledgementSheets.jsx`
++- `src/components/fieldv2/FieldTimeTracker.jsx`
++- `src/lib/fieldReadinessViewModel.ts`
++- `src/lib/jobStateMachine.ts`
++- `src/lib/fieldJobExecutionModel.ts`
++- `src/lib/canonicalFieldEventCoverage.ts`
++- `src/lib/__tests__/jobStateTransitionMutation.test.ts`
++- `build-changes/README.md`
++
++### Patch
++
++**[`iteration-15-travel-arrival.patch`](./iteration-15-travel-arrival.patch)**
++
++Re-generate from the **repository root**:
++
++```bash
++git diff HEAD -- \
++  src/components/field/AcknowledgementSheets.jsx \
++  src/components/fieldv2/FieldTimeTracker.jsx \
++  src/components/fieldv2/JobOverview.jsx \
++  src/components/fieldv2/JobStateTransitioner.jsx \
++  src/lib/__tests__/jobStateTransitionMutation.test.ts \
++  src/lib/canonicalFieldEventCoverage.ts \
++  src/lib/fieldJobExecutionModel.ts \
++  src/lib/fieldReadinessViewModel.ts \
++  src/lib/jobStateMachine.ts \
++  src/lib/jobStateTransitionMutation.ts \
++  src/lib/travelArrivalEvent.js \
++  build-changes/README.md \
++  > build-changes/iteration-15-travel-arrival.patch
++```
++
++### How to use the patch
++
++```bash
++git apply --check build-changes/iteration-15-travel-arrival.patch
++git apply build-changes/iteration-15-travel-arrival.patch
++```
++
++### Iteration 15.1 — Cleanup (pre–Iteration 16)
++
++- **Sheets:** `EtaAcknowledgementSheet` and `OnSiteCheckInSheet` **await** `onConfirm` and close only after success; `JobStateTransitioner` uses **`mutateAsync`** for those microflows so failures keep the sheet open for retry (toast still from mutation `onError`).
++- **Docs:** [`jobStateTransitionMutation.ts`](../src/lib/jobStateTransitionMutation.ts) module header documents **travel_start scope** (assigned → en_route only) and the **intentional dual check-in arrival path**; [`canonicalFieldEventCoverage.ts`](../src/lib/canonicalFieldEventCoverage.ts) notes cross-reference.
++- **UX:** Shorter lifecycle copy in transitioner / overview / sheets; sheets use **`max-h-[85vh] overflow-y-auto`** for small screens. Optional travel GPS remains a **consent-gated one-shot sample**, not live tracking (see mutation + [`travelGps.js`](../src/lib/travelGps.js)).
++
++---
++
++## Iteration 16 — Consent-aware location + map P0/P1 (canonical v2)
++
++**P0 — Static site context:** [`JobOverview.jsx`](../src/components/fieldv2/JobOverview.jsx) embeds [`JobSiteMap.jsx`](../src/components/field/JobSiteMap.jsx) (lazy) when the job has site name, address, or coordinates; subordinate trust line that map/address are from the **work order**, not live device tracking. **Single** “Open in Maps” action lives in `JobSiteMap` footer (no duplicate header link, no separate address hyperlink in Overview).
++
++**URL helper:** [`siteOpenInMapsUrl.js`](../src/lib/siteOpenInMapsUrl.js) — `buildSiteOpenInMapsUrl(job)` prefers `site_lat`/`site_lon`, else `site_address`; fixes coords-with-no-address (previously no external maps button). Tests: [`siteOpenInMapsUrl.test.ts`](../src/lib/__tests__/siteOpenInMapsUrl.test.ts).
++
++**P1 — Travel-start honesty:** [`EtaAcknowledgementSheet`](../src/components/field/AcknowledgementSheets.jsx) — one-line footnote from [`getLocationConsentState`](../src/lib/locationConsent.js) (granted vs not). No onboarding changes ([`LocationConsentStep.jsx`](../src/components/onboarding/LocationConsentStep.jsx) = Iteration 17).
++
++### Changed file list
++
++**New**
++
++- `src/lib/siteOpenInMapsUrl.js`
++- `src/lib/__tests__/siteOpenInMapsUrl.test.ts`
++
++**Modified**
++
++- `src/components/field/JobSiteMap.jsx`
++- `src/components/fieldv2/JobOverview.jsx`
++- `src/components/field/AcknowledgementSheets.jsx`
++- `build-changes/README.md`
++
++### Patch
++
++**[`iteration-16-location-maps.patch`](./iteration-16-location-maps.patch)**
++
++Re-generate from the **repository root** (include new files with `git add` first, or append `git diff --no-index /dev/null` hunks for untracked files):
++
++```bash
++git diff HEAD -- \
++  src/components/field/JobSiteMap.jsx \
++  src/components/fieldv2/JobOverview.jsx \
++  src/components/field/AcknowledgementSheets.jsx \
++  src/lib/siteOpenInMapsUrl.js \
++  src/lib/__tests__/siteOpenInMapsUrl.test.ts \
++  build-changes/README.md \
++  > build-changes/iteration-16-location-maps.patch
++```
++
++### How to use the patch
++
++```bash
++git apply --check build-changes/iteration-16-location-maps.patch
++git apply build-changes/iteration-16-location-maps.patch
++```
++
++---
++
+ ## Adding future iterations
+ 
+ 1. Create `iteration-N-<short-name>.patch` using a scoped `git diff` (and `git diff --no-index` for new files if needed).
+diff --git a/src/components/field/AcknowledgementSheets.jsx b/src/components/field/AcknowledgementSheets.jsx
+index a5b3353..6eaca77 100644
+--- a/src/components/field/AcknowledgementSheets.jsx
++++ b/src/components/field/AcknowledgementSheets.jsx
+@@ -11,12 +11,13 @@ import {
+   SheetFooter,
+ } from '@/components/ui/sheet';
+ import { Button } from '@/components/ui/button';
+-import { Loader2, ClipboardList, Route } from 'lucide-react';
++import { Loader2, ClipboardList, MapPin, Route } from 'lucide-react';
+ import {
+   SCOPE_ACKNOWLEDGEMENT_ITEMS,
+   allScopeAcknowledgementsTrue,
+   emptyScopeAcknowledgementState,
+ } from '@/constants/scopeAcknowledgements';
++import { getLocationConsentState } from '@/lib/locationConsent';
+ 
+ /**
+  * Scope/readiness flags before starting the work timer or equivalent flows.
+@@ -55,10 +56,11 @@ export function PreArrivalAckSheet({ open, onOpenChange, jobLabel, onConfirm })
+             <div className="h-9 w-9 rounded-full bg-purple-50 flex items-center justify-center">
+               <ClipboardList className="h-4 w-4 text-purple-600" />
+             </div>
+-            <SheetTitle className="text-base">Before you arrive</SheetTitle>
++            <SheetTitle className="text-base">Before billable work</SheetTitle>
+           </div>
+           <SheetDescription className="text-xs text-left leading-relaxed">
+-            Confirm you have reviewed scope, risks, and site constraints before time starts on this job.
++            You are already checked in on site — this step is only before the work timer records billable time.
++            Confirm scope, risks, and site constraints; it does not replace travel or on-site check-in.
+             {jobLabel ? <span className="block mt-1 font-semibold text-slate-700">{jobLabel}</span> : null}
+           </SheetDescription>
+         </SheetHeader>
+@@ -97,6 +99,7 @@ export function PreArrivalAckSheet({ open, onOpenChange, jobLabel, onConfirm })
+ 
+ /**
+  * ETA / route acknowledgement before marking en route.
++ * `onConfirm` is awaited before the sheet closes; on failure the sheet stays open for retry.
+  */
+ export function EtaAcknowledgementSheet({
+   open,
+@@ -118,7 +121,7 @@ export function EtaAcknowledgementSheet({
+     setPending(true);
+     try {
+       const ts = new Date().toISOString();
+-      onConfirm?.(ts);
++      await Promise.resolve(onConfirm?.(ts));
+       onOpenChange(false);
+     } finally {
+       setPending(false);
+@@ -127,7 +130,7 @@ export function EtaAcknowledgementSheet({
+ 
+   return (
+     <Sheet open={open} onOpenChange={onOpenChange}>
+-      <SheetContent side="bottom" className="rounded-t-3xl">
++      <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto">
+         <SheetHeader className="text-left space-y-2 pb-2">
+           <div className="flex items-center gap-2">
+             <div className="h-9 w-9 rounded-full bg-cyan-50 flex items-center justify-center">
+@@ -138,7 +141,7 @@ export function EtaAcknowledgementSheet({
+           <SheetDescription className="text-xs text-left leading-relaxed">
+             {description}
+             <span className="block mt-2 text-slate-600">
+-              First of three readiness steps on this job: route, then start work, then the work timer.
++              1/3: route → check-in → start work &amp; timer.
+             </span>
+             {jobLabel ? <span className="block mt-2 font-semibold text-slate-700">{jobLabel}</span> : null}
+           </SheetDescription>
+@@ -156,6 +159,12 @@ export function EtaAcknowledgementSheet({
+           </span>
+         </label>
+ 
++        <p className="text-[11px] text-slate-500 leading-snug px-0.5 pb-1">
++          {getLocationConsentState() === 'granted'
++            ? 'A single optional device location may be recorded for travel start.'
++            : 'Location access is off. Travel still works without device GPS.'}
++        </p>
++
+         <SheetFooter className="flex-col sm:flex-col gap-2 pt-2">
+           <Button
+             className="w-full rounded-xl bg-cyan-600 hover:bg-cyan-700"
+@@ -170,3 +179,74 @@ export function EtaAcknowledgementSheet({
+     </Sheet>
+   );
+ }
++
++/**
++ * Lightweight on-site check-in confirmation before job moves to checked in (canonical field v2).
++ * `onConfirm` is awaited before the sheet closes; on failure the sheet stays open for retry.
++ */
++export function OnSiteCheckInSheet({
++  open,
++  onOpenChange,
++  jobLabel,
++  onConfirm,
++}) {
++  const [ack, setAck] = useState(false);
++  const [pending, setPending] = useState(false);
++
++  useEffect(() => {
++    if (!open) setAck(false);
++  }, [open]);
++
++  const handleConfirm = async () => {
++    if (!ack) return;
++    setPending(true);
++    try {
++      await Promise.resolve(onConfirm?.());
++      onOpenChange(false);
++    } finally {
++      setPending(false);
++    }
++  };
++
++  return (
++    <Sheet open={open} onOpenChange={onOpenChange}>
++      <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto">
++        <SheetHeader className="text-left space-y-2 pb-2">
++          <div className="flex items-center gap-2">
++            <div className="h-9 w-9 rounded-full bg-purple-50 flex items-center justify-center">
++              <MapPin className="h-4 w-4 text-purple-600" />
++            </div>
++            <SheetTitle className="text-base">On-site check-in</SheetTitle>
++          </div>
++          <SheetDescription className="text-xs text-left leading-relaxed">
++            Records that you are on site — not travel, not billable time. Next: Start work, then Start timer when you bill.
++            {jobLabel ? (
++              <span className="block mt-1 font-semibold text-slate-700">{jobLabel}</span>
++            ) : null}
++          </SheetDescription>
++        </SheetHeader>
++
++        <label className="flex items-start gap-2.5 text-xs text-slate-700 cursor-pointer py-3">
++          <input
++            type="checkbox"
++            checked={ack}
++            onChange={(e) => setAck(e.target.checked)}
++            className="mt-0.5 rounded border-slate-300"
++          />
++          <span className="leading-snug">I am on site (or at the agreed work location).</span>
++        </label>
++
++        <SheetFooter className="flex-col sm:flex-col gap-2 pt-2">
++          <Button
++            className="w-full rounded-xl bg-purple-600 hover:bg-purple-700"
++            disabled={!ack || pending}
++            onClick={() => void handleConfirm()}
++          >
++            {pending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
++            Record check-in
++          </Button>
++        </SheetFooter>
++      </SheetContent>
++    </Sheet>
++  );
++}
+diff --git a/src/components/field/JobSiteMap.jsx b/src/components/field/JobSiteMap.jsx
+index 6fe2dd4..1eed0cd 100644
+--- a/src/components/field/JobSiteMap.jsx
++++ b/src/components/field/JobSiteMap.jsx
+@@ -1,12 +1,16 @@
+ /**
+- * Iteration 5a: embedded site map (static pin) + Open in Maps fallback.
+- * Uses react-leaflet; does not use live GPS — only job.site_lat / site_lon.
++ * Iteration 5a / 16: embedded site map (static pin) + Open in Maps from work-order data only.
++ * Uses react-leaflet; does not use live GPS — only job.site_lat / site_lon and/or site_address.
+  */
+ import React, { useEffect } from 'react';
+ import L from 'leaflet';
+ import { MapContainer, TileLayer, Marker } from 'react-leaflet';
+ import { MapPin, Navigation, ExternalLink } from 'lucide-react';
+ import { cn } from '@/lib/utils';
++import {
++  buildSiteOpenInMapsUrl,
++  parseSiteCoordinate,
++} from '@/lib/siteOpenInMapsUrl';
+ 
+ import markerIcon2x from 'leaflet/dist/images/marker-icon-2x.png';
+ import markerIcon from 'leaflet/dist/images/marker-icon.png';
+@@ -24,17 +28,6 @@ function fixLeafletDefaultIcons() {
+   });
+ }
+ 
+-function mapsHref(job) {
+-  if (!job?.site_address) return null;
+-  return `https://maps.google.com/maps?q=${encodeURIComponent(job.site_address)}`;
+-}
+-
+-function parseCoord(v) {
+-  if (v == null || v === '') return null;
+-  const n = typeof v === 'number' ? v : Number(v);
+-  return Number.isFinite(n) ? n : null;
+-}
+-
+ /**
+  * @param {Object} props
+  * @param {Record<string, unknown>} props.job
+@@ -50,10 +43,10 @@ export default function JobSiteMap({
+   dense = false,
+   scrollWheelZoom = false,
+ }) {
+-  const lat = parseCoord(job?.site_lat);
+-  const lon = parseCoord(job?.site_lon);
++  const lat = parseSiteCoordinate(job?.site_lat);
++  const lon = parseSiteCoordinate(job?.site_lon);
+   const hasCoords = lat != null && lon != null;
+-  const href = mapsHref(job);
++  const href = buildSiteOpenInMapsUrl(job);
+ 
+   useEffect(() => {
+     if (hasCoords) fixLeafletDefaultIcons();
+@@ -75,6 +68,8 @@ export default function JobSiteMap({
+     </a>
+   ) : null;
+ 
++  const footerLabel = job?.site_address || job?.site_name || null;
++
+   if (!hasCoords) {
+     return (
+       <div className={cn('rounded-xl border border-slate-200 bg-slate-50 overflow-hidden', className)}>
+@@ -82,14 +77,12 @@ export default function JobSiteMap({
+           <div className="flex items-start gap-2 text-slate-600">
+             <MapPin className={cn('text-slate-400 flex-shrink-0 mt-0.5', dense ? 'h-4 w-4' : 'h-5 w-5')} />
+             <div className="min-w-0 text-sm">
+-              <p className="text-[10px] font-black text-slate-400 uppercase tracking-widest mb-1">
+-                No map coordinates
++              <p className="text-xs text-slate-700 leading-snug font-medium">
++                Site pin needs latitude/longitude on the job.
+               </p>
+-              {job?.site_address ? (
+-                <p className="font-semibold text-slate-700 leading-snug">{job.site_address}</p>
+-              ) : (
+-                <p className="text-xs text-slate-500">Add site latitude/longitude on the job to show a pin.</p>
+-              )}
++              {footerLabel ? (
++                <p className="text-xs text-slate-600 mt-1.5 leading-snug">{footerLabel}</p>
++              ) : null}
+             </div>
+           </div>
+           {openMapsBtn}
+@@ -123,13 +116,19 @@ export default function JobSiteMap({
+           <Marker position={center} />
+         </MapContainer>
+       </div>
+-      {(openMapsBtn || job?.site_address) && (
+-        <div className={cn('flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 bg-white px-3 py-2', dense && 'px-2 py-1.5')}>
+-          {job?.site_address && (
++      {(openMapsBtn || footerLabel) && (
++        <div
++          className={cn(
++            'flex flex-wrap items-center gap-2 border-t border-slate-200 bg-white px-3 py-2',
++            dense && 'px-2 py-1.5',
++            footerLabel ? 'justify-between' : 'justify-end'
++          )}
++        >
++          {footerLabel ? (
+             <p className={cn('text-slate-600 truncate flex-1 min-w-0', dense ? 'text-[10px]' : 'text-xs')}>
+-              {job.site_address}
++              {footerLabel}
+             </p>
+-          )}
++          ) : null}
+           {openMapsBtn}
+         </div>
+       )}
+diff --git a/src/components/fieldv2/JobOverview.jsx b/src/components/fieldv2/JobOverview.jsx
+index 5647a5a..3fa6ec1 100644
+--- a/src/components/fieldv2/JobOverview.jsx
++++ b/src/components/fieldv2/JobOverview.jsx
+@@ -1,10 +1,10 @@
+ /**
+  * JobOverview — Job context, lifecycle transitions (authoritative), work timer, site/contact.
+  */
+-import React from 'react';
++import React, { lazy, Suspense } from 'react';
+ import {
+-  MapPin, Phone, Mail, User, Clock, Building2,
+-  AlertTriangle, FileText,
++  Phone, Mail, User, Clock, Building2,
++  AlertTriangle, FileText, Loader2,
+ } from 'lucide-react';
+ import { cn } from '@/lib/utils';
+ import { format, parseISO } from 'date-fns';
+@@ -18,10 +18,14 @@ import {
+   FIELD_INNER_STACK,
+   FIELD_LINK_PRIMARY,
+   FIELD_LINK_SECONDARY,
++  FIELD_META,
+   FIELD_META_MONO,
+   FIELD_OVERLINE,
+   FIELD_STACK_GAP,
+ } from '@/lib/fieldVisualTokens';
++import { jobHasSiteCoordinates } from '@/lib/siteOpenInMapsUrl';
++
++const JobSiteMapLazy = lazy(() => import('@/components/field/JobSiteMap'));
+ 
+ function InfoRow({ icon: Icon, label, children, href }) {
+   const inner = (
+@@ -58,6 +62,9 @@ export default function JobOverview({
+   hasSignature,
+ }) {
+   const stat = LIFECYCLE_DISPLAY[job.status] || LIFECYCLE_DISPLAY.assigned;
++  const showSiteSection = Boolean(
++    job.site_name || job.site_address || jobHasSiteCoordinates(job)
++  );
+ 
+   return (
+     <div className={FIELD_STACK_GAP}>
+@@ -113,10 +120,11 @@ export default function JobOverview({
+           Job state
+         </p>
+         <p className="text-[11px] text-slate-500 mb-2 px-0.5 leading-snug">
+-          Update travel, check-in, work, pause, and completion status here.
++          Route (ETA + travel) → check-in → start work → timer (billable only). Pause/complete in Job state.
+         </p>
+         <JobStateTransitioner
+           job={job}
++          timeEntries={timeEntries}
+           evidence={evidence}
+           runbookComplete={runbookComplete}
+           hasSignature={hasSignature}
+@@ -157,22 +165,26 @@ export default function JobOverview({
+         </div>
+       </FieldSectionCard>
+ 
+-      {(job.site_name || job.site_address) && (
++      {showSiteSection && (
+         <FieldSectionCard title="Site">
+-          <div className={FIELD_INNER_STACK}>
+-            {job.site_name && <InfoRow icon={Building2} label="Site">{job.site_name}</InfoRow>}
+-            {job.site_address && (
+-              <InfoRow icon={MapPin} label="Address">
+-                <a
+-                  href={`https://maps.google.com/?q=${encodeURIComponent(job.site_address)}`}
+-                  target="_blank"
+-                  rel="noopener noreferrer"
+-                  className="text-blue-600"
+-                >
+-                  {job.site_address}
+-                </a>
+-              </InfoRow>
++          <p
++            className={cn(FIELD_META, 'text-[11px] mb-2 px-0.5 leading-snug')}
++          >
++            Map and address come from the work order—not your live location.
++          </p>
++          <div className={cn(FIELD_INNER_STACK, 'gap-3')}>
++            {job.site_name && (
++              <InfoRow icon={Building2} label="Site">{job.site_name}</InfoRow>
+             )}
++            <Suspense
++              fallback={
++                <div className="flex items-center justify-center h-[188px] rounded-xl border border-slate-200 bg-slate-50 text-slate-400">
++                  <Loader2 className="h-6 w-6 animate-spin" aria-hidden />
++                </div>
++              }
++            >
++              <JobSiteMapLazy job={job} height={188} dense scrollWheelZoom={false} />
++            </Suspense>
+           </div>
+         </FieldSectionCard>
+       )}
+diff --git a/src/lib/siteOpenInMapsUrl.js b/src/lib/siteOpenInMapsUrl.js
+new file mode 100644
+index 0000000..dec45fc
+--- /dev/null
++++ b/src/lib/siteOpenInMapsUrl.js
+@@ -0,0 +1,43 @@
++/**
++ * P0: build “open site in maps” URLs from work-order fields only (no device GPS).
++ * Prefer coordinates when both are valid; else fall back to site_address text.
++ */
++
++/**
++ * @param {unknown} v
++ * @returns {number | null}
++ */
++export function parseSiteCoordinate(v) {
++  if (v == null || v === '') return null;
++  const n = typeof v === 'number' ? v : Number(v);
++  return Number.isFinite(n) ? n : null;
++}
++
++/**
++ * @param {Record<string, unknown> | null | undefined} job
++ * @returns {string | null}
++ */
++export function buildSiteOpenInMapsUrl(job) {
++  if (!job || typeof job !== 'object') return null;
++  const lat = parseSiteCoordinate(job.site_lat);
++  const lon = parseSiteCoordinate(job.site_lon);
++  if (lat != null && lon != null) {
++    return `https://maps.google.com/maps?q=${lat},${lon}`;
++  }
++  const addr = job.site_address;
++  if (typeof addr === 'string' && addr.trim() !== '') {
++    return `https://maps.google.com/maps?q=${encodeURIComponent(addr.trim())}`;
++  }
++  return null;
++}
++
++/**
++ * @param {Record<string, unknown> | null | undefined} job
++ * @returns {boolean}
++ */
++export function jobHasSiteCoordinates(job) {
++  if (!job || typeof job !== 'object') return false;
++  return (
++    parseSiteCoordinate(job.site_lat) != null && parseSiteCoordinate(job.site_lon) != null
++  );
++}
+diff --git a/src/lib/__tests__/siteOpenInMapsUrl.test.ts b/src/lib/__tests__/siteOpenInMapsUrl.test.ts
+new file mode 100644
+index 0000000..196ab9b
+--- /dev/null
++++ b/src/lib/__tests__/siteOpenInMapsUrl.test.ts
+@@ -0,0 +1,72 @@
++import { describe, it, expect } from 'vitest';
++import {
++  parseSiteCoordinate,
++  buildSiteOpenInMapsUrl,
++  jobHasSiteCoordinates,
++} from '@/lib/siteOpenInMapsUrl';
++
++describe('parseSiteCoordinate', () => {
++  it('parses finite numbers', () => {
++    expect(parseSiteCoordinate(40.7128)).toBe(40.7128);
++    expect(parseSiteCoordinate(-74.006)).toBe(-74.006);
++  });
++  it('parses numeric strings', () => {
++    expect(parseSiteCoordinate('37.7749')).toBe(37.7749);
++  });
++  it('returns null for invalid', () => {
++    expect(parseSiteCoordinate(null)).toBeNull();
++    expect(parseSiteCoordinate('')).toBeNull();
++    expect(parseSiteCoordinate(NaN)).toBeNull();
++    expect(parseSiteCoordinate('x')).toBeNull();
++  });
++});
++
++describe('buildSiteOpenInMapsUrl', () => {
++  it('prefers coordinates when both present', () => {
++    const url = buildSiteOpenInMapsUrl({
++      site_lat: 40.1,
++      site_lon: -74.2,
++      site_address: '123 Main St',
++    });
++    expect(url).toBe('https://maps.google.com/maps?q=40.1,-74.2');
++  });
++
++  it('uses coordinates from string coords', () => {
++    expect(buildSiteOpenInMapsUrl({ site_lat: '40.1', site_lon: '-74.2' })).toBe(
++      'https://maps.google.com/maps?q=40.1,-74.2'
++    );
++  });
++
++  it('falls back to address when coords incomplete', () => {
++    expect(
++      buildSiteOpenInMapsUrl({ site_lat: 40.1, site_address: '99 Oak Ave' })
++    ).toBe('https://maps.google.com/maps?q=' + encodeURIComponent('99 Oak Ave'));
++  });
++
++  it('uses address only when no coords', () => {
++    expect(buildSiteOpenInMapsUrl({ site_address: 'Boston, MA' })).toBe(
++      'https://maps.google.com/maps?q=' + encodeURIComponent('Boston, MA')
++    );
++  });
++
++  it('trims address', () => {
++    expect(buildSiteOpenInMapsUrl({ site_address: '  x  ' })).toBe(
++      'https://maps.google.com/maps?q=' + encodeURIComponent('x')
++    );
++  });
++
++  it('returns null when nothing usable', () => {
++    expect(buildSiteOpenInMapsUrl({})).toBeNull();
++    expect(buildSiteOpenInMapsUrl({ site_address: '   ' })).toBeNull();
++    expect(buildSiteOpenInMapsUrl(null)).toBeNull();
++  });
++});
++
++describe('jobHasSiteCoordinates', () => {
++  it('true when both coords valid', () => {
++    expect(jobHasSiteCoordinates({ site_lat: 1, site_lon: 2 })).toBe(true);
++  });
++  it('false when one missing', () => {
++    expect(jobHasSiteCoordinates({ site_lat: 1 })).toBe(false);
++  });
++});

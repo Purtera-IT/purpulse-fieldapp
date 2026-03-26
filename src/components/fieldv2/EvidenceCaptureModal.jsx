@@ -10,7 +10,7 @@ import { defaultAdapters } from '@/lib/fieldAdapters';
 import {
   buildEvidenceTypeOptions,
   flattenRunbookSteps,
-  getStorageNoteForFileUrl,
+  getArtifactPersistencePresentation,
 } from '@/lib/fieldEvidenceViewModel';
 
 async function hashFile(file) {
@@ -131,16 +131,19 @@ export default function EvidenceCaptureModal({
         toast.error('Evidence saved, but manifest log failed', { description: msg });
       }
 
-      const storageNote = getStorageNoteForFileUrl(persistedUrl);
-      const detailLine =
-        storageNote || (syncStatus === 'pending' ? 'Saved. Storage sync is still pending.' : null);
+      const pres = getArtifactPersistencePresentation({
+        id: record?.id || evidenceId,
+        status: 'uploaded',
+        file_url: persistedUrl,
+        azure_blob_url: record?.azure_blob_url ?? null,
+      });
       setDoneSummary({
-        headline: 'Saved to this job',
-        detail: detailLine,
+        headline: pres.headline,
+        detail: pres.detailLine,
       });
 
       if (!manifestFailed) {
-        toast.success('Evidence saved to this job');
+        toast.success('Saved on job');
       }
 
       setPhase('done');
@@ -336,7 +339,7 @@ export default function EvidenceCaptureModal({
               <div className="h-14 w-14 rounded-full bg-emerald-50 flex items-center justify-center">
                 <CheckCircle2 className="h-8 w-8 text-emerald-500" />
               </div>
-              <p className="font-black text-slate-900 text-center">{doneSummary?.headline || 'Saved to this job'}</p>
+              <p className="font-black text-slate-900 text-center">{doneSummary?.headline || 'Saved on job'}</p>
               {doneSummary?.detail && (
                 <p className="text-xs text-slate-500 text-center leading-relaxed">{doneSummary.detail}</p>
               )}

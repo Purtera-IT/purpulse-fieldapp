@@ -5,18 +5,29 @@
 import React, { useState } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { base44 } from '@/api/base44Client';
-import { Plus, X, MapPin, Tag, CheckCircle2, XCircle, FileText, Layers, Circle } from 'lucide-react';
+import {
+  Plus,
+  X,
+  MapPin,
+  Tag,
+  CheckCircle2,
+  XCircle,
+  FileText,
+  Layers,
+  Circle,
+  Loader2,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { format, parseISO } from 'date-fns';
 import EvidenceCaptureModal from './EvidenceCaptureModal';
 import LabelerModal from './LabelerModal';
 import {
   assignEvidenceToRequirements,
+  getArtifactPersistencePresentation,
   getEvidenceStatusPresentation,
   groupEvidenceByStepOrJob,
   partitionEvidenceForRequirements,
   resolveRunbookStepTitle,
-  getStorageNoteForFileUrl,
 } from '@/lib/fieldEvidenceViewModel';
 import {
   getEvidenceQcPresentation,
@@ -58,6 +69,9 @@ function EvidenceRequirementsPanel({ job, evidence, onAddForRequirement }) {
     <div className={cn(FIELD_CARD, 'p-4 mb-4')}>
       <p className={cn(FIELD_OVERLINE, 'mb-3')}>
         Required vs uploaded
+      </p>
+      <p className={cn(FIELD_META, 'mb-3 leading-snug')}>
+        Counts use saved-on-job rows (previews count while sync catches up).
       </p>
       <ul className="space-y-2">
         {rows.map(({ req, min, uploaded, inFlight, met, unmet }, i) => (
@@ -111,12 +125,12 @@ function EvidenceQcSummaryStrip({ evidence }) {
   if (r.uploadedCount === 0) return null;
   return (
     <div className={cn(FIELD_CARD, 'p-3 mb-4 border border-slate-200')}>
-      <p className={cn(FIELD_OVERLINE, 'mb-1')}>QC on saved files</p>
+      <p className={cn(FIELD_OVERLINE, 'mb-1')}>QC on items saved on job</p>
       <p className="text-xs font-semibold text-slate-800 tabular-nums">
         {r.passCount} passed · {r.failCount} failed · {r.pendingCount} not reviewed
       </p>
       <p className={cn(FIELD_META, 'mt-2 leading-snug')}>
-        Saved means the file is attached to the job. QC pass/fail is a separate review outcome.
+        Saved on job means the evidence row is on this work order. QC pass/fail is a separate review outcome.
       </p>
     </div>
   );
@@ -196,8 +210,8 @@ function DetailModal({ ev, job, onClose, onLabel, onQC, onAddReplacement }) {
   const isImg = ev.content_type?.startsWith('image');
   const qcPres = getEvidenceQcPresentation(ev);
   const st = getEvidenceStatusPresentation(ev);
+  const artifact = getArtifactPersistencePresentation(ev);
   const stepTitle = resolveRunbookStepTitle(job, ev.runbook_step_id);
-  const storageNote = getStorageNoteForFileUrl(ev.file_url);
 
   return (
     <div
@@ -231,19 +245,16 @@ function DetailModal({ ev, job, onClose, onLabel, onQC, onAddReplacement }) {
           )}
 
           <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-2">
-            <p className={cn(FIELD_OVERLINE, 'text-[10px]')}>Two different things</p>
+            <p className={cn(FIELD_OVERLINE, 'text-[10px]')}>On this job</p>
+            <p className="text-sm font-semibold text-slate-900">{artifact.headline}</p>
+            {artifact.detailLine ? (
+              <p className={cn(FIELD_META, 'leading-snug')}>{artifact.detailLine}</p>
+            ) : null}
+          </div>
+
+          <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-2">
+            <p className={cn(FIELD_OVERLINE, 'text-[10px]')}>QC review</p>
             <div className="flex flex-wrap items-center gap-2">
-              <div
-                className={cn(
-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border',
-                  st.tone === 'ok' && 'bg-white border-emerald-200 text-emerald-900',
-                  st.tone === 'pending' && 'bg-white border-amber-200 text-amber-950',
-                  st.tone === 'error' && 'bg-white border-red-200 text-red-900',
-                  st.tone === 'muted' && 'bg-white border-slate-200 text-slate-700',
-                )}
-              >
-                File on job: {st.shortLabel}
-              </div>
               <div
                 className={cn(
                   'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white',
@@ -322,12 +333,6 @@ function DetailModal({ ev, job, onClose, onLabel, onQC, onAddReplacement }) {
             </div>
           </div>
 
-          {storageNote && (
-            <p className={cn(FIELD_BODY, 'bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2')}>
-              {storageNote}
-            </p>
-          )}
-
           <div>
             <p className={cn(FIELD_OVERLINE, 'mb-2')}>Metadata</p>
             <table className="w-full">
@@ -401,7 +406,17 @@ function RunbookStepSummary({ job, evidence }) {
   );
 }
 
-export default function EvidenceGalleryView({ job, evidence, labels: _labels, adapters, onRefresh }) {
+export default function EvidenceGalleryView({
+  job,
+  evidence,
+  labels: _labels,
+  adapters,
+  onRefresh,
+  evidenceLoading = false,
+  evidenceLoadError = false,
+  evidenceLoadErrorMessage,
+  onRetryEvidence,
+}) {
   const [showCapture, setShowCapture] = useState(false);
   const [captureFocus, setCaptureFocus] = useState({ evidenceType: null, stepId: null });
   const [captureNonce, setCaptureNonce] = useState(0);
@@ -432,6 +447,39 @@ export default function EvidenceGalleryView({ job, evidence, labels: _labels, ad
     setCaptureNonce((n) => n + 1);
     setShowCapture(true);
   };
+
+  if (evidenceLoadError) {
+    return (
+      <div className="space-y-4">
+        <p className={cn(FIELD_OVERLINE, 'mb-1')}>Evidence for this job</p>
+        <div className={cn(FIELD_CARD, 'p-6 flex flex-col items-center text-center gap-3')}>
+          <p className="text-sm font-semibold text-slate-800">Couldn&apos;t load evidence</p>
+          <p className={cn(FIELD_META, 'max-w-sm leading-snug')}>
+            {evidenceLoadErrorMessage || 'Check your connection and try again.'}
+          </p>
+          <button
+            type="button"
+            onClick={() => onRetryEvidence?.()}
+            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold px-5"
+          >
+            Retry
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  if (evidenceLoading) {
+    return (
+      <div className="space-y-4">
+        <p className={cn(FIELD_OVERLINE, 'mb-1')}>Evidence for this job</p>
+        <div className={cn(FIELD_CARD, 'p-12 flex flex-col items-center justify-center gap-3')}>
+          <Loader2 className="h-7 w-7 animate-spin text-slate-400" aria-hidden />
+          <p className={cn(FIELD_META, 'text-slate-600')}>Loading evidence…</p>
+        </div>
+      </div>
+    );
+  }
 
   const hasReqs = Array.isArray(job?.evidence_requirements) && job.evidence_requirements.length > 0;
   const { rows: reqRows, other } = assignEvidenceToRequirements(job, evidence);

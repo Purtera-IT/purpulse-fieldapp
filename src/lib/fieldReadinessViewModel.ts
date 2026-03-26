@@ -26,11 +26,11 @@ export interface FieldReadinessSummary {
 /** Same strings for Overview headline and `getNextStepMessage` where both apply — one story on the page. */
 export const READINESS_SHORT_LINES = {
   assigned:
-    'Review site details before heading out. Going en route will ask you to confirm travel.',
+    'Review site and dispatch details. Start route captures your ETA commitment and travel start, then you are en route.',
   en_route:
-    'Travel to site, check in when you arrive, then start work when ready (short checklist first).',
+    'On site? Record check-in next, then Start work (tool/pre-start checklist), then the work timer when you bill — travel and work time stay separate.',
   checked_in:
-    'Start work when ready — a short pre-start checklist runs first. Then open Runbook and use the timer when you bill.',
+    'On site and checked in. Start work runs the pre-start checklist; the work timer is for billable work only (not travel).',
   paused:
     'Resume in job state when ready — the pre-start checklist does not run again. Start the timer when you bill time.',
 } as const
@@ -124,12 +124,12 @@ export function buildFieldReadinessSummary(
 
   const routeDetail = (() => {
     if (states.route === 'complete') {
-      return 'Workflow past assigned (travel step used in this app — not a separate server “ETA record”).'
+      return 'Past assigned: ETA acknowledgement and travel start were captured when you went en route (dispatch + travel facts in this app).'
     }
     if (states.route === 'current') {
-      return 'Next: Job state → Start route; travel confirmation runs in the sheet.'
+      return 'Next: Job state → Start route — short sheet commits ETA and records travel start before en route.'
     }
-    return 'Upcoming: confirm travel when you start route.'
+    return 'Upcoming: Start route when you head out; ETA sheet ties commitment to travel start.'
   })()
 
   const startDetail = (() => {
@@ -137,12 +137,15 @@ export function buildFieldReadinessSummary(
       return 'Pre-start checklist already done; resume does not repeat it — use Resume in job state.'
     }
     if (states.start_work === 'complete') {
-      return 'Workflow past pre-start checklist (first move to in progress in this app).'
+      return 'Past on-site check-in and pre-start checklist (in progress in this app).'
     }
     if (states.start_work === 'current') {
+      if (job.status === 'en_route') {
+        return 'Next: check in on site (short confirmation), then Job state → Start work for the pre-start checklist.'
+      }
       return 'Next: Job state → Start work; short checklist before in progress.'
     }
-    return 'Upcoming: runs when you go to in progress from checked in.'
+    return 'Upcoming: after check-in, Start work moves you to in progress.'
   })()
 
   const timerDetail = (() => {

@@ -49,15 +49,22 @@ export const CANONICAL_FIELD_EVENT_COVERAGE: Record<Iteration14EventFamily, Fami
   travel: {
     emitterModule: 'src/lib/travelArrivalEvent.js',
     emitExports: ['buildTravelEventPayload', 'emitCanonicalEventsForTimeEntry'],
-    v2Surfaces: ['FieldTimeTracker: no travel_start; TimeLog/TimerPanel legacy'],
+    v2Surfaces: [
+      'JobStateTransitioner → jobStateTransitionMutation (assigned→en_route travel_start; en_route→checked_in travel_end when open segment)',
+      'TimeLog/TimerPanel legacy',
+    ],
     notes:
-      'INCOMPLETE in canonical v2: FieldJobDetail / FieldTimeTracker do not emit travel_start|travel_end; legacy TimerPanel/TimeLog do. Primary follow-up = Iteration 15-style travel/arrival lifecycle on the rebuilt path.',
+      'Iteration 15: dispatch_event first, then travel_event (travel_start) with optional consent GPS sample, then Job.update; travel_start/travel_end TimeEntry when apiClient succeeds. travel_start only on assigned→en_route (see jobStateTransitionMutation header). Legacy TimerPanel/TimeLog unchanged.',
   },
   arrival: {
     emitterModule: 'src/lib/travelArrivalEvent.js',
-    emitExports: ['buildArrivalEventPayload', 'emitCanonicalEventsForTimeEntry'],
-    v2Surfaces: ['FieldTimeTracker (work_start before time entry)'],
-    notes: 'Arrival/work_start queued before apiClient.createTimeEntry',
+    emitExports: ['buildArrivalEventPayload', 'emitCanonicalEventsForTimeEntry', 'emitArrivalForClockIn'],
+    v2Surfaces: [
+      'JobStateTransitioner → jobStateTransitionMutation (check-in: travel_end+arrival_event or emitArrivalForClockIn)',
+      'FieldTimeTracker (work_start → arrival_event work_start before TimeEntry)',
+    ],
+    notes:
+      'Check-in after dispatch: travel_end+arrival when open travel_start segment exists, else emitArrivalForClockIn only — intentional fork (see jobStateTransitionMutation). work_start path still FieldTimeTracker-only for billable timer.',
   },
   runbook_step: {
     emitterModule: 'src/lib/runbookStepEvent.js',

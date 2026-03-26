@@ -11,7 +11,7 @@ import { uploadQueue } from '@/lib/uploadQueue';
 import { getTelemetryQueueDepthForJob } from '@/lib/telemetryQueue';
 import { summarizeJobSyncSurface } from '@/lib/fieldJobSyncPresentation';
 import { cn } from '@/lib/utils';
-import { FIELD_OVERLINE } from '@/lib/fieldVisualTokens';
+import { FIELD_META, FIELD_OVERLINE } from '@/lib/fieldVisualTokens';
 import OfflineEditsIndicator from '@/components/fieldv2/OfflineEditsIndicator.jsx';
 import UploadProgressIndicator from '@/components/fieldv2/UploadProgressIndicator';
 
@@ -69,10 +69,16 @@ export default function FieldJobSyncStrip({ jobId, isOnline }) {
 
   if (!summary.showSyncStrip) {
     return (
-      <>
+      <div className="space-y-2 min-w-0">
+        <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-2.5 min-w-0">
+          <p className={FIELD_OVERLINE}>Sync and uploads</p>
+          <p className={cn(FIELD_META, 'text-slate-600 leading-snug mt-0.5')}>
+            No backlog in this summary for the job — uploads and offline edits still show below when active.
+          </p>
+        </div>
         <OfflineEditsIndicator jobId={jobId} isOnline={isOnline} nested />
         <UploadProgressIndicator jobId={jobId} isOnline={isOnline} nested />
-      </>
+      </div>
     );
   }
 

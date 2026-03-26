@@ -929,6 +929,217 @@ git apply build-changes/iteration-14-canonical-events.patch
 
 ---
 
+## Iteration 15 — Canonical travel + arrival hardening
+
+**Dispatch → travel/arrival → Job.update:** [`jobStateTransitionMutation.ts`](../src/lib/jobStateTransitionMutation.ts) — after `emitDispatchEventForJobStatusChange`, **`travel_event` (`travel_start`)** (+ optional consent GPS) and **`travel_start` TimeEntry** on **assigned → en_route**; on **checked_in**, **`travel_end` + `arrival_event`** when an open travel segment exists in `timeEntries`, else **`emitArrivalForClockIn`**, plus optional **`travel_end` TimeEntry**.
+
+**UI:** [`JobStateTransitioner.jsx`](../src/components/fieldv2/JobStateTransitioner.jsx) — `timeEntries` from [`JobOverview.jsx`](../src/components/fieldv2/JobOverview.jsx); [`OnSiteCheckInSheet`](../src/components/field/AcknowledgementSheets.jsx) for en_route → checked_in; ETA/route copy; readiness hints. Copy updates in [`fieldReadinessViewModel.ts`](../src/lib/fieldReadinessViewModel.ts), [`jobStateMachine.ts`](../src/lib/jobStateMachine.ts), [`fieldJobExecutionModel.ts`](../src/lib/fieldJobExecutionModel.ts), [`FieldTimeTracker.jsx`](../src/components/fieldv2/FieldTimeTracker.jsx). [`computeOpenTravelMinutesForJob`](../src/lib/travelArrivalEvent.js) uses string-coerced `job_id` matching.
+
+**Registry:** [`canonicalFieldEventCoverage.ts`](../src/lib/canonicalFieldEventCoverage.ts) — travel/arrival v2 surfaces updated.
+
+### Changed file list
+
+**Modified**
+
+- `src/lib/jobStateTransitionMutation.ts`
+- `src/lib/travelArrivalEvent.js`
+- `src/components/fieldv2/JobStateTransitioner.jsx`
+- `src/components/fieldv2/JobOverview.jsx`
+- `src/components/field/AcknowledgementSheets.jsx`
+- `src/components/fieldv2/FieldTimeTracker.jsx`
+- `src/lib/fieldReadinessViewModel.ts`
+- `src/lib/jobStateMachine.ts`
+- `src/lib/fieldJobExecutionModel.ts`
+- `src/lib/canonicalFieldEventCoverage.ts`
+- `src/lib/__tests__/jobStateTransitionMutation.test.ts`
+- `build-changes/README.md`
+
+### Patch
+
+**[`iteration-15-travel-arrival.patch`](./iteration-15-travel-arrival.patch)**
+
+Re-generate from the **repository root**:
+
+```bash
+git diff HEAD -- \
+  src/components/field/AcknowledgementSheets.jsx \
+  src/components/fieldv2/FieldTimeTracker.jsx \
+  src/components/fieldv2/JobOverview.jsx \
+  src/components/fieldv2/JobStateTransitioner.jsx \
+  src/lib/__tests__/jobStateTransitionMutation.test.ts \
+  src/lib/canonicalFieldEventCoverage.ts \
+  src/lib/fieldJobExecutionModel.ts \
+  src/lib/fieldReadinessViewModel.ts \
+  src/lib/jobStateMachine.ts \
+  src/lib/jobStateTransitionMutation.ts \
+  src/lib/travelArrivalEvent.js \
+  build-changes/README.md \
+  > build-changes/iteration-15-travel-arrival.patch
+```
+
+### How to use the patch
+
+```bash
+git apply --check build-changes/iteration-15-travel-arrival.patch
+git apply build-changes/iteration-15-travel-arrival.patch
+```
+
+### Iteration 15.1 — Cleanup (pre–Iteration 16)
+
+- **Sheets:** `EtaAcknowledgementSheet` and `OnSiteCheckInSheet` **await** `onConfirm` and close only after success; `JobStateTransitioner` uses **`mutateAsync`** for those microflows so failures keep the sheet open for retry (toast still from mutation `onError`).
+- **Docs:** [`jobStateTransitionMutation.ts`](../src/lib/jobStateTransitionMutation.ts) module header documents **travel_start scope** (assigned → en_route only) and the **intentional dual check-in arrival path**; [`canonicalFieldEventCoverage.ts`](../src/lib/canonicalFieldEventCoverage.ts) notes cross-reference.
+- **UX:** Shorter lifecycle copy in transitioner / overview / sheets; sheets use **`max-h-[85vh] overflow-y-auto`** for small screens. Optional travel GPS remains a **consent-gated one-shot sample**, not live tracking (see mutation + [`travelGps.js`](../src/lib/travelGps.js)).
+
+---
+
+## Iteration 16 — Consent-aware location + map P0/P1 (canonical v2)
+
+**P0 — Static site context:** [`JobOverview.jsx`](../src/components/fieldv2/JobOverview.jsx) embeds [`JobSiteMap.jsx`](../src/components/field/JobSiteMap.jsx) (lazy) when the job has site name, address, or coordinates; subordinate trust line that map/address are from the **work order**, not live device tracking. **Single** “Open in Maps” action lives in `JobSiteMap` footer (no duplicate header link, no separate address hyperlink in Overview).
+
+**URL helper:** [`siteOpenInMapsUrl.js`](../src/lib/siteOpenInMapsUrl.js) — `buildSiteOpenInMapsUrl(job)` prefers `site_lat`/`site_lon`, else `site_address`; fixes coords-with-no-address (previously no external maps button). Tests: [`siteOpenInMapsUrl.test.ts`](../src/lib/__tests__/siteOpenInMapsUrl.test.ts).
+
+**P1 — Travel-start honesty:** [`EtaAcknowledgementSheet`](../src/components/field/AcknowledgementSheets.jsx) — one-line footnote from [`getLocationConsentState`](../src/lib/locationConsent.js) (granted vs not). No onboarding changes ([`LocationConsentStep.jsx`](../src/components/onboarding/LocationConsentStep.jsx) = Iteration 17).
+
+### Changed file list
+
+**New**
+
+- `src/lib/siteOpenInMapsUrl.js`
+- `src/lib/__tests__/siteOpenInMapsUrl.test.ts`
+
+**Modified**
+
+- `src/components/field/JobSiteMap.jsx`
+- `src/components/fieldv2/JobOverview.jsx`
+- `src/components/field/AcknowledgementSheets.jsx`
+- `build-changes/README.md`
+
+### Patch
+
+**[`iteration-16-location-maps.patch`](./iteration-16-location-maps.patch)**
+
+Re-generate from the **repository root** (include new files with `git add` first, or append `git diff --no-index /dev/null` hunks for untracked files):
+
+```bash
+git diff HEAD -- \
+  src/components/field/JobSiteMap.jsx \
+  src/components/fieldv2/JobOverview.jsx \
+  src/components/field/AcknowledgementSheets.jsx \
+  src/lib/siteOpenInMapsUrl.js \
+  src/lib/__tests__/siteOpenInMapsUrl.test.ts \
+  build-changes/README.md \
+  > build-changes/iteration-16-location-maps.patch
+```
+
+### How to use the patch
+
+```bash
+git apply --check build-changes/iteration-16-location-maps.patch
+git apply build-changes/iteration-16-location-maps.patch
+```
+
+---
+
+## Iteration 17 — Artifact persistence maturity (canonical v2)
+
+**Goal:** One presentation model ([`artifactPersistencePresentation.ts`](../src/lib/artifactPersistencePresentation.ts)) maps `status` + `file_url` (+ optional `azure_blob_url`) to compact operator copy (Saved on job / Preview only / Link on job / Waiting to sync / Needs attention). [`fieldEvidenceViewModel.ts`](../src/lib/fieldEvidenceViewModel.ts) delegates `getEvidenceStatusPresentation` and `getStorageNoteForFileUrl` to it.
+
+**Canonical UI:** [`EvidenceGalleryView.jsx`](../src/components/fieldv2/EvidenceGalleryView.jsx) — **On this job** block (headline + detail), **QC review** block separate; no duplicate storage paragraph. [`EvidenceCaptureModal.jsx`](../src/components/fieldv2/EvidenceCaptureModal.jsx) done state uses the same `headline` / `detailLine` as the helper. Requirement counts unchanged; one-line meta explains met counts include previews while sync catches up.
+
+**Tests:** [`artifactPersistencePresentation.test.ts`](../src/lib/__tests__/artifactPersistencePresentation.test.ts)
+
+### Changed file list
+
+**New**
+
+- `src/lib/artifactPersistencePresentation.ts`
+- `src/lib/__tests__/artifactPersistencePresentation.test.ts`
+
+**Modified**
+
+- `src/lib/fieldEvidenceViewModel.ts`
+- `src/components/fieldv2/EvidenceGalleryView.jsx`
+- `src/components/fieldv2/EvidenceCaptureModal.jsx`
+- `build-changes/README.md`
+
+### Patch
+
+**[`iteration-17-artifact-persistence.patch`](./iteration-17-artifact-persistence.patch)**
+
+Re-generate from the **repository root**:
+
+```bash
+git diff HEAD -- \
+  src/lib/artifactPersistencePresentation.ts \
+  src/lib/__tests__/artifactPersistencePresentation.test.ts \
+  src/lib/fieldEvidenceViewModel.ts \
+  src/components/fieldv2/EvidenceGalleryView.jsx \
+  src/components/fieldv2/EvidenceCaptureModal.jsx \
+  build-changes/README.md \
+  > build-changes/iteration-17-artifact-persistence.patch
+```
+
+(For untracked new files at generation time, append `git diff --no-index /dev/null <path>` hunks.)
+
+### How to use the patch
+
+```bash
+git apply --check build-changes/iteration-17-artifact-persistence.patch
+git apply build-changes/iteration-17-artifact-persistence.patch
+```
+
+---
+
+## Iteration 18 — Release-grade QA / app-store readiness (canonical v2)
+
+**Goal:** Harden trust on the canonical technician path without redesigning the shell: stronger loading/error/retry, no empty-state flash for evidence while `fj-evidence` is pending, calmer sync strip when there is no backlog summary, thumb-friendly tab/filter targets, and aligned “Couldn’t load … / Retry / Back to jobs” patterns.
+
+### Release-readiness audit (addressed in this iteration)
+
+| Area | Hardening |
+|------|-----------|
+| Job list | [`FieldJobs.jsx`](../src/pages/FieldJobs.jsx): loading line (“Loading jobs…”), error + **Retry**, offline hint when `!navigator.onLine`, taller filter chips (`min-h-9`). |
+| Job detail shell | [`FieldJobDetail.jsx`](../src/pages/FieldJobDetail.jsx): missing `id` → clearer copy + back link; loading → “Loading job…”; job load error → **Retry** + back; tab buttons `min-h-11`. |
+| Evidence parallel load | Evidence query exposes `isPending` → [`EvidenceGalleryView.jsx`](../src/components/fieldv2/EvidenceGalleryView.jsx) shows **Loading evidence…** or **Couldn’t load evidence** + Retry instead of flashing empty buckets. |
+| Sync strip | [`FieldJobSyncStrip.jsx`](../src/components/fieldv2/FieldJobSyncStrip.jsx): when `showSyncStrip` is false, one honest line + nested indicators (no fake “fully synced” claim). |
+
+**Deferred (Iteration 19+):** Per-tab skeletons for every resource, E2E smoke suite, deep offline UX, legacy pages.
+
+### Changed file list
+
+**Modified**
+
+- `src/pages/FieldJobs.jsx`
+- `src/pages/FieldJobDetail.jsx`
+- `src/components/fieldv2/EvidenceGalleryView.jsx`
+- `src/components/fieldv2/FieldJobSyncStrip.jsx`
+- `build-changes/README.md`
+
+### Patch
+
+**[`iteration-18-release-hardening.patch`](./iteration-18-release-hardening.patch)**
+
+Re-generate from the **repository root**:
+
+```bash
+git diff HEAD -- \
+  src/pages/FieldJobs.jsx \
+  src/pages/FieldJobDetail.jsx \
+  src/components/fieldv2/EvidenceGalleryView.jsx \
+  src/components/fieldv2/FieldJobSyncStrip.jsx \
+  build-changes/README.md \
+  > build-changes/iteration-18-release-hardening.patch
+```
+
+### How to use the patch
+
+```bash
+git apply --check build-changes/iteration-18-release-hardening.patch
+git apply build-changes/iteration-18-release-hardening.patch
+```
+
+---
+
 ## Adding future iterations
 
 1. Create `iteration-N-<short-name>.patch` using a scoped `git diff` (and `git diff --no-index` for new files if needed).

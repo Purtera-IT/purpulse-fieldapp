@@ -91,7 +91,13 @@ export default function FieldJobDetail() {
     };
   }, []);
 
-  const { data: job, isLoading, isError, error } = useQuery({
+  const {
+    data: job,
+    isLoading,
+    isError,
+    error,
+    refetch: refetchJob,
+  } = useQuery({
     queryKey: ['fj-job', jobId],
     queryFn: () => (jobId ? jobRepository.getJob(jobId) : Promise.resolve(null)),
     enabled: !!jobId,
@@ -150,7 +156,13 @@ export default function FieldJobDetail() {
     };
   }, [jobId, contextDedupeKey, techKey]);
 
-  const { data: evidence = [] } = useQuery({
+  const {
+    data: evidence = [],
+    isPending: evidencePending,
+    isError: evidenceQueryError,
+    error: evidenceQueryErr,
+    refetch: refetchEvidence,
+  } = useQuery({
     queryKey: ['fj-evidence', jobId],
     queryFn: () => (jobId ? apiClient.getEvidence(jobId) : Promise.resolve([])),
     enabled: !!jobId,
@@ -210,12 +222,24 @@ export default function FieldJobDetail() {
   };
 
   if (!jobId) {
-    return <div className="p-10 text-center text-slate-400 text-sm">No job ID in URL</div>;
+    return (
+      <div className={cn('min-h-screen flex flex-col items-center justify-center px-6 text-center', FIELD_PAGE_PAD_X)}>
+        <p className="text-sm font-semibold text-slate-800">No job selected</p>
+        <p className={cn(FIELD_META, 'mt-2 max-w-sm')}>Open a job from the list — the link needs a job id.</p>
+        <Link
+          to="/FieldJobs"
+          className="mt-8 inline-flex min-h-11 items-center justify-center px-4 text-sm font-bold text-slate-900 underline underline-offset-2"
+        >
+          Back to jobs
+        </Link>
+      </div>
+    );
   }
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
+      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center gap-3">
+        <Loader2 className="h-7 w-7 animate-spin text-slate-400" aria-hidden />
+        <p className={cn(FIELD_META, 'text-slate-600')}>Loading job…</p>
       </div>
     );
   }
@@ -226,9 +250,16 @@ export default function FieldJobDetail() {
         <p className="text-xs text-slate-500 mt-2 max-w-sm">
           {error instanceof Error ? error.message : 'Check your connection and try again.'}
         </p>
+        <button
+          type="button"
+          onClick={() => refetchJob()}
+          className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold px-5"
+        >
+          Retry
+        </button>
         <Link
           to="/FieldJobs"
-          className="mt-6 text-sm font-bold text-slate-900 underline underline-offset-2"
+          className="mt-4 inline-flex min-h-11 items-center justify-center text-sm font-bold text-slate-900 underline underline-offset-2"
         >
           Back to jobs
         </Link>
@@ -242,7 +273,7 @@ export default function FieldJobDetail() {
         <p className="text-xs text-slate-500 mt-2">It may have been removed or you may not have access.</p>
         <Link
           to="/FieldJobs"
-          className="mt-6 text-sm font-bold text-slate-900 underline underline-offset-2"
+          className="mt-8 inline-flex min-h-11 items-center justify-center text-sm font-bold text-slate-900 underline underline-offset-2"
         >
           Back to jobs
         </Link>
@@ -255,6 +286,11 @@ export default function FieldJobDetail() {
   const tabProps = {
     job,
     evidence,
+    evidenceLoading: evidencePending,
+    evidenceLoadError: evidenceQueryError,
+    evidenceLoadErrorMessage:
+      evidenceQueryErr instanceof Error ? evidenceQueryErr.message : undefined,
+    onRetryEvidence: refetchEvidence,
     labels,
     meetings,
     activities,
@@ -326,7 +362,7 @@ export default function FieldJobDetail() {
                 aria-selected={section === s.id}
                 onClick={() => setSection(s.id)}
                 className={cn(
-                  'flex-1 min-w-[4.25rem] py-2 px-1.5 rounded-lg transition-all whitespace-nowrap',
+                  'flex-1 min-w-[4.25rem] min-h-11 py-2 px-1.5 rounded-lg transition-all whitespace-nowrap',
                   FIELD_TAB_LABEL,
                   section === s.id ? FIELD_TAB_ACTIVE : FIELD_TAB_INACTIVE
                 )}

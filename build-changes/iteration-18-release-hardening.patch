@@ -1,0 +1,616 @@
+diff --git a/build-changes/README.md b/build-changes/README.md
+index f285e6b..b913af2 100644
+--- a/build-changes/README.md
++++ b/build-changes/README.md
+@@ -929,6 +929,217 @@ git apply build-changes/iteration-14-canonical-events.patch
+ 
+ ---
+ 
++## Iteration 15 — Canonical travel + arrival hardening
++
++**Dispatch → travel/arrival → Job.update:** [`jobStateTransitionMutation.ts`](../src/lib/jobStateTransitionMutation.ts) — after `emitDispatchEventForJobStatusChange`, **`travel_event` (`travel_start`)** (+ optional consent GPS) and **`travel_start` TimeEntry** on **assigned → en_route**; on **checked_in**, **`travel_end` + `arrival_event`** when an open travel segment exists in `timeEntries`, else **`emitArrivalForClockIn`**, plus optional **`travel_end` TimeEntry**.
++
++**UI:** [`JobStateTransitioner.jsx`](../src/components/fieldv2/JobStateTransitioner.jsx) — `timeEntries` from [`JobOverview.jsx`](../src/components/fieldv2/JobOverview.jsx); [`OnSiteCheckInSheet`](../src/components/field/AcknowledgementSheets.jsx) for en_route → checked_in; ETA/route copy; readiness hints. Copy updates in [`fieldReadinessViewModel.ts`](../src/lib/fieldReadinessViewModel.ts), [`jobStateMachine.ts`](../src/lib/jobStateMachine.ts), [`fieldJobExecutionModel.ts`](../src/lib/fieldJobExecutionModel.ts), [`FieldTimeTracker.jsx`](../src/components/fieldv2/FieldTimeTracker.jsx). [`computeOpenTravelMinutesForJob`](../src/lib/travelArrivalEvent.js) uses string-coerced `job_id` matching.
++
++**Registry:** [`canonicalFieldEventCoverage.ts`](../src/lib/canonicalFieldEventCoverage.ts) — travel/arrival v2 surfaces updated.
++
++### Changed file list
++
++**Modified**
++
++- `src/lib/jobStateTransitionMutation.ts`
++- `src/lib/travelArrivalEvent.js`
++- `src/components/fieldv2/JobStateTransitioner.jsx`
++- `src/components/fieldv2/JobOverview.jsx`
++- `src/components/field/AcknowledgementSheets.jsx`
++- `src/components/fieldv2/FieldTimeTracker.jsx`
++- `src/lib/fieldReadinessViewModel.ts`
++- `src/lib/jobStateMachine.ts`
++- `src/lib/fieldJobExecutionModel.ts`
++- `src/lib/canonicalFieldEventCoverage.ts`
++- `src/lib/__tests__/jobStateTransitionMutation.test.ts`
++- `build-changes/README.md`
++
++### Patch
++
++**[`iteration-15-travel-arrival.patch`](./iteration-15-travel-arrival.patch)**
++
++Re-generate from the **repository root**:
++
++```bash
++git diff HEAD -- \
++  src/components/field/AcknowledgementSheets.jsx \
++  src/components/fieldv2/FieldTimeTracker.jsx \
++  src/components/fieldv2/JobOverview.jsx \
++  src/components/fieldv2/JobStateTransitioner.jsx \
++  src/lib/__tests__/jobStateTransitionMutation.test.ts \
++  src/lib/canonicalFieldEventCoverage.ts \
++  src/lib/fieldJobExecutionModel.ts \
++  src/lib/fieldReadinessViewModel.ts \
++  src/lib/jobStateMachine.ts \
++  src/lib/jobStateTransitionMutation.ts \
++  src/lib/travelArrivalEvent.js \
++  build-changes/README.md \
++  > build-changes/iteration-15-travel-arrival.patch
++```
++
++### How to use the patch
++
++```bash
++git apply --check build-changes/iteration-15-travel-arrival.patch
++git apply build-changes/iteration-15-travel-arrival.patch
++```
++
++### Iteration 15.1 — Cleanup (pre–Iteration 16)
++
++- **Sheets:** `EtaAcknowledgementSheet` and `OnSiteCheckInSheet` **await** `onConfirm` and close only after success; `JobStateTransitioner` uses **`mutateAsync`** for those microflows so failures keep the sheet open for retry (toast still from mutation `onError`).
++- **Docs:** [`jobStateTransitionMutation.ts`](../src/lib/jobStateTransitionMutation.ts) module header documents **travel_start scope** (assigned → en_route only) and the **intentional dual check-in arrival path**; [`canonicalFieldEventCoverage.ts`](../src/lib/canonicalFieldEventCoverage.ts) notes cross-reference.
++- **UX:** Shorter lifecycle copy in transitioner / overview / sheets; sheets use **`max-h-[85vh] overflow-y-auto`** for small screens. Optional travel GPS remains a **consent-gated one-shot sample**, not live tracking (see mutation + [`travelGps.js`](../src/lib/travelGps.js)).
++
++---
++
++## Iteration 16 — Consent-aware location + map P0/P1 (canonical v2)
++
++**P0 — Static site context:** [`JobOverview.jsx`](../src/components/fieldv2/JobOverview.jsx) embeds [`JobSiteMap.jsx`](../src/components/field/JobSiteMap.jsx) (lazy) when the job has site name, address, or coordinates; subordinate trust line that map/address are from the **work order**, not live device tracking. **Single** “Open in Maps” action lives in `JobSiteMap` footer (no duplicate header link, no separate address hyperlink in Overview).
++
++**URL helper:** [`siteOpenInMapsUrl.js`](../src/lib/siteOpenInMapsUrl.js) — `buildSiteOpenInMapsUrl(job)` prefers `site_lat`/`site_lon`, else `site_address`; fixes coords-with-no-address (previously no external maps button). Tests: [`siteOpenInMapsUrl.test.ts`](../src/lib/__tests__/siteOpenInMapsUrl.test.ts).
++
++**P1 — Travel-start honesty:** [`EtaAcknowledgementSheet`](../src/components/field/AcknowledgementSheets.jsx) — one-line footnote from [`getLocationConsentState`](../src/lib/locationConsent.js) (granted vs not). No onboarding changes ([`LocationConsentStep.jsx`](../src/components/onboarding/LocationConsentStep.jsx) = Iteration 17).
++
++### Changed file list
++
++**New**
++
++- `src/lib/siteOpenInMapsUrl.js`
++- `src/lib/__tests__/siteOpenInMapsUrl.test.ts`
++
++**Modified**
++
++- `src/components/field/JobSiteMap.jsx`
++- `src/components/fieldv2/JobOverview.jsx`
++- `src/components/field/AcknowledgementSheets.jsx`
++- `build-changes/README.md`
++
++### Patch
++
++**[`iteration-16-location-maps.patch`](./iteration-16-location-maps.patch)**
++
++Re-generate from the **repository root** (include new files with `git add` first, or append `git diff --no-index /dev/null` hunks for untracked files):
++
++```bash
++git diff HEAD -- \
++  src/components/field/JobSiteMap.jsx \
++  src/components/fieldv2/JobOverview.jsx \
++  src/components/field/AcknowledgementSheets.jsx \
++  src/lib/siteOpenInMapsUrl.js \
++  src/lib/__tests__/siteOpenInMapsUrl.test.ts \
++  build-changes/README.md \
++  > build-changes/iteration-16-location-maps.patch
++```
++
++### How to use the patch
++
++```bash
++git apply --check build-changes/iteration-16-location-maps.patch
++git apply build-changes/iteration-16-location-maps.patch
++```
++
++---
++
++## Iteration 17 — Artifact persistence maturity (canonical v2)
++
++**Goal:** One presentation model ([`artifactPersistencePresentation.ts`](../src/lib/artifactPersistencePresentation.ts)) maps `status` + `file_url` (+ optional `azure_blob_url`) to compact operator copy (Saved on job / Preview only / Link on job / Waiting to sync / Needs attention). [`fieldEvidenceViewModel.ts`](../src/lib/fieldEvidenceViewModel.ts) delegates `getEvidenceStatusPresentation` and `getStorageNoteForFileUrl` to it.
++
++**Canonical UI:** [`EvidenceGalleryView.jsx`](../src/components/fieldv2/EvidenceGalleryView.jsx) — **On this job** block (headline + detail), **QC review** block separate; no duplicate storage paragraph. [`EvidenceCaptureModal.jsx`](../src/components/fieldv2/EvidenceCaptureModal.jsx) done state uses the same `headline` / `detailLine` as the helper. Requirement counts unchanged; one-line meta explains met counts include previews while sync catches up.
++
++**Tests:** [`artifactPersistencePresentation.test.ts`](../src/lib/__tests__/artifactPersistencePresentation.test.ts)
++
++### Changed file list
++
++**New**
++
++- `src/lib/artifactPersistencePresentation.ts`
++- `src/lib/__tests__/artifactPersistencePresentation.test.ts`
++
++**Modified**
++
++- `src/lib/fieldEvidenceViewModel.ts`
++- `src/components/fieldv2/EvidenceGalleryView.jsx`
++- `src/components/fieldv2/EvidenceCaptureModal.jsx`
++- `build-changes/README.md`
++
++### Patch
++
++**[`iteration-17-artifact-persistence.patch`](./iteration-17-artifact-persistence.patch)**
++
++Re-generate from the **repository root**:
++
++```bash
++git diff HEAD -- \
++  src/lib/artifactPersistencePresentation.ts \
++  src/lib/__tests__/artifactPersistencePresentation.test.ts \
++  src/lib/fieldEvidenceViewModel.ts \
++  src/components/fieldv2/EvidenceGalleryView.jsx \
++  src/components/fieldv2/EvidenceCaptureModal.jsx \
++  build-changes/README.md \
++  > build-changes/iteration-17-artifact-persistence.patch
++```
++
++(For untracked new files at generation time, append `git diff --no-index /dev/null <path>` hunks.)
++
++### How to use the patch
++
++```bash
++git apply --check build-changes/iteration-17-artifact-persistence.patch
++git apply build-changes/iteration-17-artifact-persistence.patch
++```
++
++---
++
++## Iteration 18 — Release-grade QA / app-store readiness (canonical v2)
++
++**Goal:** Harden trust on the canonical technician path without redesigning the shell: stronger loading/error/retry, no empty-state flash for evidence while `fj-evidence` is pending, calmer sync strip when there is no backlog summary, thumb-friendly tab/filter targets, and aligned “Couldn’t load … / Retry / Back to jobs” patterns.
++
++### Release-readiness audit (addressed in this iteration)
++
++| Area | Hardening |
++|------|-----------|
++| Job list | [`FieldJobs.jsx`](../src/pages/FieldJobs.jsx): loading line (“Loading jobs…”), error + **Retry**, offline hint when `!navigator.onLine`, taller filter chips (`min-h-9`). |
++| Job detail shell | [`FieldJobDetail.jsx`](../src/pages/FieldJobDetail.jsx): missing `id` → clearer copy + back link; loading → “Loading job…”; job load error → **Retry** + back; tab buttons `min-h-11`. |
++| Evidence parallel load | Evidence query exposes `isPending` → [`EvidenceGalleryView.jsx`](../src/components/fieldv2/EvidenceGalleryView.jsx) shows **Loading evidence…** or **Couldn’t load evidence** + Retry instead of flashing empty buckets. |
++| Sync strip | [`FieldJobSyncStrip.jsx`](../src/components/fieldv2/FieldJobSyncStrip.jsx): when `showSyncStrip` is false, one honest line + nested indicators (no fake “fully synced” claim). |
++
++**Deferred (Iteration 19+):** Per-tab skeletons for every resource, E2E smoke suite, deep offline UX, legacy pages.
++
++### Changed file list
++
++**Modified**
++
++- `src/pages/FieldJobs.jsx`
++- `src/pages/FieldJobDetail.jsx`
++- `src/components/fieldv2/EvidenceGalleryView.jsx`
++- `src/components/fieldv2/FieldJobSyncStrip.jsx`
++- `build-changes/README.md`
++
++### Patch
++
++**[`iteration-18-release-hardening.patch`](./iteration-18-release-hardening.patch)**
++
++Re-generate from the **repository root**:
++
++```bash
++git diff HEAD -- \
++  src/pages/FieldJobs.jsx \
++  src/pages/FieldJobDetail.jsx \
++  src/components/fieldv2/EvidenceGalleryView.jsx \
++  src/components/fieldv2/FieldJobSyncStrip.jsx \
++  build-changes/README.md \
++  > build-changes/iteration-18-release-hardening.patch
++```
++
++### How to use the patch
++
++```bash
++git apply --check build-changes/iteration-18-release-hardening.patch
++git apply build-changes/iteration-18-release-hardening.patch
++```
++
++---
++
+ ## Adding future iterations
+ 
+ 1. Create `iteration-N-<short-name>.patch` using a scoped `git diff` (and `git diff --no-index` for new files if needed).
+diff --git a/src/components/fieldv2/EvidenceGalleryView.jsx b/src/components/fieldv2/EvidenceGalleryView.jsx
+index c3fa293..8d2e25c 100644
+--- a/src/components/fieldv2/EvidenceGalleryView.jsx
++++ b/src/components/fieldv2/EvidenceGalleryView.jsx
+@@ -5,18 +5,29 @@
+ import React, { useState } from 'react';
+ import { useMutation, useQueryClient } from '@tanstack/react-query';
+ import { base44 } from '@/api/base44Client';
+-import { Plus, X, MapPin, Tag, CheckCircle2, XCircle, FileText, Layers, Circle } from 'lucide-react';
++import {
++  Plus,
++  X,
++  MapPin,
++  Tag,
++  CheckCircle2,
++  XCircle,
++  FileText,
++  Layers,
++  Circle,
++  Loader2,
++} from 'lucide-react';
+ import { cn } from '@/lib/utils';
+ import { format, parseISO } from 'date-fns';
+ import EvidenceCaptureModal from './EvidenceCaptureModal';
+ import LabelerModal from './LabelerModal';
+ import {
+   assignEvidenceToRequirements,
++  getArtifactPersistencePresentation,
+   getEvidenceStatusPresentation,
+   groupEvidenceByStepOrJob,
+   partitionEvidenceForRequirements,
+   resolveRunbookStepTitle,
+-  getStorageNoteForFileUrl,
+ } from '@/lib/fieldEvidenceViewModel';
+ import {
+   getEvidenceQcPresentation,
+@@ -59,6 +70,9 @@ function EvidenceRequirementsPanel({ job, evidence, onAddForRequirement }) {
+       <p className={cn(FIELD_OVERLINE, 'mb-3')}>
+         Required vs uploaded
+       </p>
++      <p className={cn(FIELD_META, 'mb-3 leading-snug')}>
++        Counts use saved-on-job rows (previews count while sync catches up).
++      </p>
+       <ul className="space-y-2">
+         {rows.map(({ req, min, uploaded, inFlight, met, unmet }, i) => (
+           <li
+@@ -111,12 +125,12 @@ function EvidenceQcSummaryStrip({ evidence }) {
+   if (r.uploadedCount === 0) return null;
+   return (
+     <div className={cn(FIELD_CARD, 'p-3 mb-4 border border-slate-200')}>
+-      <p className={cn(FIELD_OVERLINE, 'mb-1')}>QC on saved files</p>
++      <p className={cn(FIELD_OVERLINE, 'mb-1')}>QC on items saved on job</p>
+       <p className="text-xs font-semibold text-slate-800 tabular-nums">
+         {r.passCount} passed · {r.failCount} failed · {r.pendingCount} not reviewed
+       </p>
+       <p className={cn(FIELD_META, 'mt-2 leading-snug')}>
+-        Saved means the file is attached to the job. QC pass/fail is a separate review outcome.
++        Saved on job means the evidence row is on this work order. QC pass/fail is a separate review outcome.
+       </p>
+     </div>
+   );
+@@ -196,8 +210,8 @@ function DetailModal({ ev, job, onClose, onLabel, onQC, onAddReplacement }) {
+   const isImg = ev.content_type?.startsWith('image');
+   const qcPres = getEvidenceQcPresentation(ev);
+   const st = getEvidenceStatusPresentation(ev);
++  const artifact = getArtifactPersistencePresentation(ev);
+   const stepTitle = resolveRunbookStepTitle(job, ev.runbook_step_id);
+-  const storageNote = getStorageNoteForFileUrl(ev.file_url);
+ 
+   return (
+     <div
+@@ -231,19 +245,16 @@ function DetailModal({ ev, job, onClose, onLabel, onQC, onAddReplacement }) {
+           )}
+ 
+           <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-2">
+-            <p className={cn(FIELD_OVERLINE, 'text-[10px]')}>Two different things</p>
++            <p className={cn(FIELD_OVERLINE, 'text-[10px]')}>On this job</p>
++            <p className="text-sm font-semibold text-slate-900">{artifact.headline}</p>
++            {artifact.detailLine ? (
++              <p className={cn(FIELD_META, 'leading-snug')}>{artifact.detailLine}</p>
++            ) : null}
++          </div>
++
++          <div className="rounded-lg border border-slate-100 bg-slate-50/80 px-3 py-2.5 space-y-2">
++            <p className={cn(FIELD_OVERLINE, 'text-[10px]')}>QC review</p>
+             <div className="flex flex-wrap items-center gap-2">
+-              <div
+-                className={cn(
+-                  'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold border',
+-                  st.tone === 'ok' && 'bg-white border-emerald-200 text-emerald-900',
+-                  st.tone === 'pending' && 'bg-white border-amber-200 text-amber-950',
+-                  st.tone === 'error' && 'bg-white border-red-200 text-red-900',
+-                  st.tone === 'muted' && 'bg-white border-slate-200 text-slate-700',
+-                )}
+-              >
+-                File on job: {st.shortLabel}
+-              </div>
+               <div
+                 className={cn(
+                   'flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold text-white',
+@@ -322,12 +333,6 @@ function DetailModal({ ev, job, onClose, onLabel, onQC, onAddReplacement }) {
+             </div>
+           </div>
+ 
+-          {storageNote && (
+-            <p className={cn(FIELD_BODY, 'bg-slate-50 border border-slate-200/80 rounded-xl px-3 py-2')}>
+-              {storageNote}
+-            </p>
+-          )}
+-
+           <div>
+             <p className={cn(FIELD_OVERLINE, 'mb-2')}>Metadata</p>
+             <table className="w-full">
+@@ -401,7 +406,17 @@ function RunbookStepSummary({ job, evidence }) {
+   );
+ }
+ 
+-export default function EvidenceGalleryView({ job, evidence, labels: _labels, adapters, onRefresh }) {
++export default function EvidenceGalleryView({
++  job,
++  evidence,
++  labels: _labels,
++  adapters,
++  onRefresh,
++  evidenceLoading = false,
++  evidenceLoadError = false,
++  evidenceLoadErrorMessage,
++  onRetryEvidence,
++}) {
+   const [showCapture, setShowCapture] = useState(false);
+   const [captureFocus, setCaptureFocus] = useState({ evidenceType: null, stepId: null });
+   const [captureNonce, setCaptureNonce] = useState(0);
+@@ -433,6 +448,39 @@ export default function EvidenceGalleryView({ job, evidence, labels: _labels, ad
+     setShowCapture(true);
+   };
+ 
++  if (evidenceLoadError) {
++    return (
++      <div className="space-y-4">
++        <p className={cn(FIELD_OVERLINE, 'mb-1')}>Evidence for this job</p>
++        <div className={cn(FIELD_CARD, 'p-6 flex flex-col items-center text-center gap-3')}>
++          <p className="text-sm font-semibold text-slate-800">Couldn&apos;t load evidence</p>
++          <p className={cn(FIELD_META, 'max-w-sm leading-snug')}>
++            {evidenceLoadErrorMessage || 'Check your connection and try again.'}
++          </p>
++          <button
++            type="button"
++            onClick={() => onRetryEvidence?.()}
++            className="inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold px-5"
++          >
++            Retry
++          </button>
++        </div>
++      </div>
++    );
++  }
++
++  if (evidenceLoading) {
++    return (
++      <div className="space-y-4">
++        <p className={cn(FIELD_OVERLINE, 'mb-1')}>Evidence for this job</p>
++        <div className={cn(FIELD_CARD, 'p-12 flex flex-col items-center justify-center gap-3')}>
++          <Loader2 className="h-7 w-7 animate-spin text-slate-400" aria-hidden />
++          <p className={cn(FIELD_META, 'text-slate-600')}>Loading evidence…</p>
++        </div>
++      </div>
++    );
++  }
++
+   const hasReqs = Array.isArray(job?.evidence_requirements) && job.evidence_requirements.length > 0;
+   const { rows: reqRows, other } = assignEvidenceToRequirements(job, evidence);
+ 
+diff --git a/src/components/fieldv2/FieldJobSyncStrip.jsx b/src/components/fieldv2/FieldJobSyncStrip.jsx
+index 0401c3d..972186f 100644
+--- a/src/components/fieldv2/FieldJobSyncStrip.jsx
++++ b/src/components/fieldv2/FieldJobSyncStrip.jsx
+@@ -11,7 +11,7 @@ import { uploadQueue } from '@/lib/uploadQueue';
+ import { getTelemetryQueueDepthForJob } from '@/lib/telemetryQueue';
+ import { summarizeJobSyncSurface } from '@/lib/fieldJobSyncPresentation';
+ import { cn } from '@/lib/utils';
+-import { FIELD_OVERLINE } from '@/lib/fieldVisualTokens';
++import { FIELD_META, FIELD_OVERLINE } from '@/lib/fieldVisualTokens';
+ import OfflineEditsIndicator from '@/components/fieldv2/OfflineEditsIndicator.jsx';
+ import UploadProgressIndicator from '@/components/fieldv2/UploadProgressIndicator';
+ 
+@@ -69,10 +69,16 @@ export default function FieldJobSyncStrip({ jobId, isOnline }) {
+ 
+   if (!summary.showSyncStrip) {
+     return (
+-      <>
++      <div className="space-y-2 min-w-0">
++        <div className="rounded-xl border border-slate-200/80 bg-slate-50/50 px-3 py-2.5 min-w-0">
++          <p className={FIELD_OVERLINE}>Sync and uploads</p>
++          <p className={cn(FIELD_META, 'text-slate-600 leading-snug mt-0.5')}>
++            No backlog in this summary for the job — uploads and offline edits still show below when active.
++          </p>
++        </div>
+         <OfflineEditsIndicator jobId={jobId} isOnline={isOnline} nested />
+         <UploadProgressIndicator jobId={jobId} isOnline={isOnline} nested />
+-      </>
++      </div>
+     );
+   }
+ 
+diff --git a/src/pages/FieldJobDetail.jsx b/src/pages/FieldJobDetail.jsx
+index 06d5e73..eb49003 100644
+--- a/src/pages/FieldJobDetail.jsx
++++ b/src/pages/FieldJobDetail.jsx
+@@ -91,7 +91,13 @@ export default function FieldJobDetail() {
+     };
+   }, []);
+ 
+-  const { data: job, isLoading, isError, error } = useQuery({
++  const {
++    data: job,
++    isLoading,
++    isError,
++    error,
++    refetch: refetchJob,
++  } = useQuery({
+     queryKey: ['fj-job', jobId],
+     queryFn: () => (jobId ? jobRepository.getJob(jobId) : Promise.resolve(null)),
+     enabled: !!jobId,
+@@ -150,7 +156,13 @@ export default function FieldJobDetail() {
+     };
+   }, [jobId, contextDedupeKey, techKey]);
+ 
+-  const { data: evidence = [] } = useQuery({
++  const {
++    data: evidence = [],
++    isPending: evidencePending,
++    isError: evidenceQueryError,
++    error: evidenceQueryErr,
++    refetch: refetchEvidence,
++  } = useQuery({
+     queryKey: ['fj-evidence', jobId],
+     queryFn: () => (jobId ? apiClient.getEvidence(jobId) : Promise.resolve([])),
+     enabled: !!jobId,
+@@ -210,12 +222,24 @@ export default function FieldJobDetail() {
+   };
+ 
+   if (!jobId) {
+-    return <div className="p-10 text-center text-slate-400 text-sm">No job ID in URL</div>;
++    return (
++      <div className={cn('min-h-screen flex flex-col items-center justify-center px-6 text-center', FIELD_PAGE_PAD_X)}>
++        <p className="text-sm font-semibold text-slate-800">No job selected</p>
++        <p className={cn(FIELD_META, 'mt-2 max-w-sm')}>Open a job from the list — the link needs a job id.</p>
++        <Link
++          to="/FieldJobs"
++          className="mt-8 inline-flex min-h-11 items-center justify-center px-4 text-sm font-bold text-slate-900 underline underline-offset-2"
++        >
++          Back to jobs
++        </Link>
++      </div>
++    );
+   }
+   if (isLoading) {
+     return (
+-      <div className="min-h-screen flex items-center justify-center">
+-        <Loader2 className="h-6 w-6 animate-spin text-slate-400" />
++      <div className="min-h-screen flex flex-col items-center justify-center px-6 text-center gap-3">
++        <Loader2 className="h-7 w-7 animate-spin text-slate-400" aria-hidden />
++        <p className={cn(FIELD_META, 'text-slate-600')}>Loading job…</p>
+       </div>
+     );
+   }
+@@ -226,9 +250,16 @@ export default function FieldJobDetail() {
+         <p className="text-xs text-slate-500 mt-2 max-w-sm">
+           {error instanceof Error ? error.message : 'Check your connection and try again.'}
+         </p>
++        <button
++          type="button"
++          onClick={() => refetchJob()}
++          className="mt-4 inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold px-5"
++        >
++          Retry
++        </button>
+         <Link
+           to="/FieldJobs"
+-          className="mt-6 text-sm font-bold text-slate-900 underline underline-offset-2"
++          className="mt-4 inline-flex min-h-11 items-center justify-center text-sm font-bold text-slate-900 underline underline-offset-2"
+         >
+           Back to jobs
+         </Link>
+@@ -242,7 +273,7 @@ export default function FieldJobDetail() {
+         <p className="text-xs text-slate-500 mt-2">It may have been removed or you may not have access.</p>
+         <Link
+           to="/FieldJobs"
+-          className="mt-6 text-sm font-bold text-slate-900 underline underline-offset-2"
++          className="mt-8 inline-flex min-h-11 items-center justify-center text-sm font-bold text-slate-900 underline underline-offset-2"
+         >
+           Back to jobs
+         </Link>
+@@ -255,6 +286,11 @@ export default function FieldJobDetail() {
+   const tabProps = {
+     job,
+     evidence,
++    evidenceLoading: evidencePending,
++    evidenceLoadError: evidenceQueryError,
++    evidenceLoadErrorMessage:
++      evidenceQueryErr instanceof Error ? evidenceQueryErr.message : undefined,
++    onRetryEvidence: refetchEvidence,
+     labels,
+     meetings,
+     activities,
+@@ -326,7 +362,7 @@ export default function FieldJobDetail() {
+                 aria-selected={section === s.id}
+                 onClick={() => setSection(s.id)}
+                 className={cn(
+-                  'flex-1 min-w-[4.25rem] py-2 px-1.5 rounded-lg transition-all whitespace-nowrap',
++                  'flex-1 min-w-[4.25rem] min-h-11 py-2 px-1.5 rounded-lg transition-all whitespace-nowrap',
+                   FIELD_TAB_LABEL,
+                   section === s.id ? FIELD_TAB_ACTIVE : FIELD_TAB_INACTIVE
+                 )}
+diff --git a/src/pages/FieldJobs.jsx b/src/pages/FieldJobs.jsx
+index b0e726c..3516d57 100644
+--- a/src/pages/FieldJobs.jsx
++++ b/src/pages/FieldJobs.jsx
+@@ -2,7 +2,7 @@
+  * FieldJobs — Job list page (A)
+  * Mobile-first, uses JobsAdapter; unified status tokens + pull-to-refresh.
+  */
+-import React, { useState } from 'react';
++import React, { useState, useEffect } from 'react';
+ import { Link } from 'react-router-dom';
+ import { useQuery } from '@tanstack/react-query';
+ import { Search, Loader2, ChevronRight, AlertCircle, Briefcase, Calendar, User } from 'lucide-react';
+@@ -16,6 +16,7 @@ import { getFieldJobStatusDisplay, FIELD_JOB_STATUS_DISPLAY } from '@/lib/fieldJ
+ import {
+   FIELD_CARD,
+   FIELD_MAX_WIDTH,
++  FIELD_META,
+   FIELD_PAGE_PAD_X,
+   FIELD_PAGE_PAD_Y,
+ } from '@/lib/fieldVisualTokens';
+@@ -104,6 +105,20 @@ function JobCard({ job }) {
+ export default function FieldJobs() {
+   const [search,   setSearch]   = useState('');
+   const [statusF,  setStatusF]  = useState('all');
++  const [isOnline, setIsOnline] = useState(
++    typeof navigator !== 'undefined' ? navigator.onLine : true
++  );
++
++  useEffect(() => {
++    const on = () => setIsOnline(true);
++    const off = () => setIsOnline(false);
++    window.addEventListener('online', on);
++    window.addEventListener('offline', off);
++    return () => {
++      window.removeEventListener('online', on);
++      window.removeEventListener('offline', off);
++    };
++  }, []);
+ 
+   const { data: jobs = [], isLoading, isError, error, refetch } = useQuery({
+     queryKey: ['field-jobs'],
+@@ -136,7 +151,7 @@ export default function FieldJobs() {
+             {FILTER_CHIPS.map(s => (
+               <button key={s} onClick={() => setStatusF(s)}
+                 className={cn(
+-                  'flex-shrink-0 h-7 px-3 rounded-full text-[11px] font-bold transition-colors capitalize border',
++                  'flex-shrink-0 min-h-9 h-9 px-3 rounded-full text-[11px] font-bold transition-colors capitalize border',
+                   statusF === s
+                     ? 'bg-slate-900 text-white border-slate-900'
+                     : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
+@@ -161,7 +176,10 @@ export default function FieldJobs() {
+       >
+         <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
+         {isLoading ? (
+-          <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-slate-300" /></div>
++          <div className="flex flex-col items-center justify-center py-20 gap-3">
++            <Loader2 className="h-7 w-7 animate-spin text-slate-300" aria-hidden />
++            <p className={cn(FIELD_META, 'text-slate-600')}>Loading jobs…</p>
++          </div>
+         ) : isError ? (
+           <div className="flex flex-col items-center py-20 px-6 gap-3 text-center">
+             <AlertCircle className="h-10 w-10 text-amber-500" aria-hidden />
+@@ -169,6 +187,16 @@ export default function FieldJobs() {
+             <p className="text-xs text-slate-500 max-w-sm">
+               {error instanceof Error ? error.message : 'Check your connection and try again.'}
+             </p>
++            {!isOnline && (
++              <p className={cn(FIELD_META, 'text-amber-800 max-w-sm')}>You appear to be offline.</p>
++            )}
++            <button
++              type="button"
++              onClick={() => refetch()}
++              className="mt-1 inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold px-5"
++            >
++              Retry
++            </button>
+           </div>
+         ) : jobs.length === 0 ? (
+           <div className="flex flex-col items-center py-20 px-6 gap-3 text-center text-slate-500">

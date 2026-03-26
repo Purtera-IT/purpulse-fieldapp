@@ -2,7 +2,7 @@
  * FieldJobs — Job list page (A)
  * Mobile-first, uses JobsAdapter; unified status tokens + pull-to-refresh.
  */
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { Search, Loader2, ChevronRight, AlertCircle, Briefcase, Calendar, User } from 'lucide-react';
@@ -16,6 +16,7 @@ import { getFieldJobStatusDisplay, FIELD_JOB_STATUS_DISPLAY } from '@/lib/fieldJ
 import {
   FIELD_CARD,
   FIELD_MAX_WIDTH,
+  FIELD_META,
   FIELD_PAGE_PAD_X,
   FIELD_PAGE_PAD_Y,
 } from '@/lib/fieldVisualTokens';
@@ -104,6 +105,20 @@ function JobCard({ job }) {
 export default function FieldJobs() {
   const [search,   setSearch]   = useState('');
   const [statusF,  setStatusF]  = useState('all');
+  const [isOnline, setIsOnline] = useState(
+    typeof navigator !== 'undefined' ? navigator.onLine : true
+  );
+
+  useEffect(() => {
+    const on = () => setIsOnline(true);
+    const off = () => setIsOnline(false);
+    window.addEventListener('online', on);
+    window.addEventListener('offline', off);
+    return () => {
+      window.removeEventListener('online', on);
+      window.removeEventListener('offline', off);
+    };
+  }, []);
 
   const { data: jobs = [], isLoading, isError, error, refetch } = useQuery({
     queryKey: ['field-jobs'],
@@ -136,7 +151,7 @@ export default function FieldJobs() {
             {FILTER_CHIPS.map(s => (
               <button key={s} onClick={() => setStatusF(s)}
                 className={cn(
-                  'flex-shrink-0 h-7 px-3 rounded-full text-[11px] font-bold transition-colors capitalize border',
+                  'flex-shrink-0 min-h-9 h-9 px-3 rounded-full text-[11px] font-bold transition-colors capitalize border',
                   statusF === s
                     ? 'bg-slate-900 text-white border-slate-900'
                     : 'bg-white text-slate-600 border-slate-200 hover:border-slate-300 hover:bg-slate-50'
@@ -161,7 +176,10 @@ export default function FieldJobs() {
       >
         <PullToRefreshIndicator pullDistance={pullDistance} refreshing={refreshing} />
         {isLoading ? (
-          <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-slate-300" /></div>
+          <div className="flex flex-col items-center justify-center py-20 gap-3">
+            <Loader2 className="h-7 w-7 animate-spin text-slate-300" aria-hidden />
+            <p className={cn(FIELD_META, 'text-slate-600')}>Loading jobs…</p>
+          </div>
         ) : isError ? (
           <div className="flex flex-col items-center py-20 px-6 gap-3 text-center">
             <AlertCircle className="h-10 w-10 text-amber-500" aria-hidden />
@@ -169,6 +187,16 @@ export default function FieldJobs() {
             <p className="text-xs text-slate-500 max-w-sm">
               {error instanceof Error ? error.message : 'Check your connection and try again.'}
             </p>
+            {!isOnline && (
+              <p className={cn(FIELD_META, 'text-amber-800 max-w-sm')}>You appear to be offline.</p>
+            )}
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="mt-1 inline-flex min-h-11 items-center justify-center rounded-xl bg-slate-900 text-white text-sm font-bold px-5"
+            >
+              Retry
+            </button>
           </div>
         ) : jobs.length === 0 ? (
           <div className="flex flex-col items-center py-20 px-6 gap-3 text-center text-slate-500">

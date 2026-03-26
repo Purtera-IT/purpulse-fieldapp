@@ -1,0 +1,902 @@
+diff --git a/build-changes/README.md b/build-changes/README.md
+index f285e6b..a8d0109 100644
+--- a/build-changes/README.md
++++ b/build-changes/README.md
+@@ -929,6 +929,69 @@ git apply build-changes/iteration-14-canonical-events.patch
+ 
+ ---
+ 
++## Iteration 15 — Canonical travel + arrival hardening
++
++**Dispatch → travel/arrival → Job.update:** [`jobStateTransitionMutation.ts`](../src/lib/jobStateTransitionMutation.ts) — after `emitDispatchEventForJobStatusChange`, **`travel_event` (`travel_start`)** (+ optional consent GPS) and **`travel_start` TimeEntry** on **assigned → en_route**; on **checked_in**, **`travel_end` + `arrival_event`** when an open travel segment exists in `timeEntries`, else **`emitArrivalForClockIn`**, plus optional **`travel_end` TimeEntry**.
++
++**UI:** [`JobStateTransitioner.jsx`](../src/components/fieldv2/JobStateTransitioner.jsx) — `timeEntries` from [`JobOverview.jsx`](../src/components/fieldv2/JobOverview.jsx); [`OnSiteCheckInSheet`](../src/components/field/AcknowledgementSheets.jsx) for en_route → checked_in; ETA/route copy; readiness hints. Copy updates in [`fieldReadinessViewModel.ts`](../src/lib/fieldReadinessViewModel.ts), [`jobStateMachine.ts`](../src/lib/jobStateMachine.ts), [`fieldJobExecutionModel.ts`](../src/lib/fieldJobExecutionModel.ts), [`FieldTimeTracker.jsx`](../src/components/fieldv2/FieldTimeTracker.jsx). [`computeOpenTravelMinutesForJob`](../src/lib/travelArrivalEvent.js) uses string-coerced `job_id` matching.
++
++**Registry:** [`canonicalFieldEventCoverage.ts`](../src/lib/canonicalFieldEventCoverage.ts) — travel/arrival v2 surfaces updated.
++
++### Changed file list
++
++**Modified**
++
++- `src/lib/jobStateTransitionMutation.ts`
++- `src/lib/travelArrivalEvent.js`
++- `src/components/fieldv2/JobStateTransitioner.jsx`
++- `src/components/fieldv2/JobOverview.jsx`
++- `src/components/field/AcknowledgementSheets.jsx`
++- `src/components/fieldv2/FieldTimeTracker.jsx`
++- `src/lib/fieldReadinessViewModel.ts`
++- `src/lib/jobStateMachine.ts`
++- `src/lib/fieldJobExecutionModel.ts`
++- `src/lib/canonicalFieldEventCoverage.ts`
++- `src/lib/__tests__/jobStateTransitionMutation.test.ts`
++- `build-changes/README.md`
++
++### Patch
++
++**[`iteration-15-travel-arrival.patch`](./iteration-15-travel-arrival.patch)**
++
++Re-generate from the **repository root**:
++
++```bash
++git diff HEAD -- \
++  src/components/field/AcknowledgementSheets.jsx \
++  src/components/fieldv2/FieldTimeTracker.jsx \
++  src/components/fieldv2/JobOverview.jsx \
++  src/components/fieldv2/JobStateTransitioner.jsx \
++  src/lib/__tests__/jobStateTransitionMutation.test.ts \
++  src/lib/canonicalFieldEventCoverage.ts \
++  src/lib/fieldJobExecutionModel.ts \
++  src/lib/fieldReadinessViewModel.ts \
++  src/lib/jobStateMachine.ts \
++  src/lib/jobStateTransitionMutation.ts \
++  src/lib/travelArrivalEvent.js \
++  build-changes/README.md \
++  > build-changes/iteration-15-travel-arrival.patch
++```
++
++### How to use the patch
++
++```bash
++git apply --check build-changes/iteration-15-travel-arrival.patch
++git apply build-changes/iteration-15-travel-arrival.patch
++```
++
++### Iteration 15.1 — Cleanup (pre–Iteration 16)
++
++- **Sheets:** `EtaAcknowledgementSheet` and `OnSiteCheckInSheet` **await** `onConfirm` and close only after success; `JobStateTransitioner` uses **`mutateAsync`** for those microflows so failures keep the sheet open for retry (toast still from mutation `onError`).
++- **Docs:** [`jobStateTransitionMutation.ts`](../src/lib/jobStateTransitionMutation.ts) module header documents **travel_start scope** (assigned → en_route only) and the **intentional dual check-in arrival path**; [`canonicalFieldEventCoverage.ts`](../src/lib/canonicalFieldEventCoverage.ts) notes cross-reference.
++- **UX:** Shorter lifecycle copy in transitioner / overview / sheets; sheets use **`max-h-[85vh] overflow-y-auto`** for small screens. Optional travel GPS remains a **consent-gated one-shot sample**, not live tracking (see mutation + [`travelGps.js`](../src/lib/travelGps.js)).
++
++---
++
+ ## Adding future iterations
+ 
+ 1. Create `iteration-N-<short-name>.patch` using a scoped `git diff` (and `git diff --no-index` for new files if needed).
+diff --git a/src/components/field/AcknowledgementSheets.jsx b/src/components/field/AcknowledgementSheets.jsx
+index a5b3353..920619c 100644
+--- a/src/components/field/AcknowledgementSheets.jsx
++++ b/src/components/field/AcknowledgementSheets.jsx
+@@ -11,7 +11,7 @@ import {
+   SheetFooter,
+ } from '@/components/ui/sheet';
+ import { Button } from '@/components/ui/button';
+-import { Loader2, ClipboardList, Route } from 'lucide-react';
++import { Loader2, ClipboardList, MapPin, Route } from 'lucide-react';
+ import {
+   SCOPE_ACKNOWLEDGEMENT_ITEMS,
+   allScopeAcknowledgementsTrue,
+@@ -55,10 +55,11 @@ export function PreArrivalAckSheet({ open, onOpenChange, jobLabel, onConfirm })
+             <div className="h-9 w-9 rounded-full bg-purple-50 flex items-center justify-center">
+               <ClipboardList className="h-4 w-4 text-purple-600" />
+             </div>
+-            <SheetTitle className="text-base">Before you arrive</SheetTitle>
++            <SheetTitle className="text-base">Before billable work</SheetTitle>
+           </div>
+           <SheetDescription className="text-xs text-left leading-relaxed">
+-            Confirm you have reviewed scope, risks, and site constraints before time starts on this job.
++            You are already checked in on site — this step is only before the work timer records billable time.
++            Confirm scope, risks, and site constraints; it does not replace travel or on-site check-in.
+             {jobLabel ? <span className="block mt-1 font-semibold text-slate-700">{jobLabel}</span> : null}
+           </SheetDescription>
+         </SheetHeader>
+@@ -97,6 +98,7 @@ export function PreArrivalAckSheet({ open, onOpenChange, jobLabel, onConfirm })
+ 
+ /**
+  * ETA / route acknowledgement before marking en route.
++ * `onConfirm` is awaited before the sheet closes; on failure the sheet stays open for retry.
+  */
+ export function EtaAcknowledgementSheet({
+   open,
+@@ -118,7 +120,7 @@ export function EtaAcknowledgementSheet({
+     setPending(true);
+     try {
+       const ts = new Date().toISOString();
+-      onConfirm?.(ts);
++      await Promise.resolve(onConfirm?.(ts));
+       onOpenChange(false);
+     } finally {
+       setPending(false);
+@@ -127,7 +129,7 @@ export function EtaAcknowledgementSheet({
+ 
+   return (
+     <Sheet open={open} onOpenChange={onOpenChange}>
+-      <SheetContent side="bottom" className="rounded-t-3xl">
++      <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto">
+         <SheetHeader className="text-left space-y-2 pb-2">
+           <div className="flex items-center gap-2">
+             <div className="h-9 w-9 rounded-full bg-cyan-50 flex items-center justify-center">
+@@ -138,7 +140,7 @@ export function EtaAcknowledgementSheet({
+           <SheetDescription className="text-xs text-left leading-relaxed">
+             {description}
+             <span className="block mt-2 text-slate-600">
+-              First of three readiness steps on this job: route, then start work, then the work timer.
++              1/3: route → check-in → start work &amp; timer.
+             </span>
+             {jobLabel ? <span className="block mt-2 font-semibold text-slate-700">{jobLabel}</span> : null}
+           </SheetDescription>
+@@ -170,3 +172,74 @@ export function EtaAcknowledgementSheet({
+     </Sheet>
+   );
+ }
++
++/**
++ * Lightweight on-site check-in confirmation before job moves to checked in (canonical field v2).
++ * `onConfirm` is awaited before the sheet closes; on failure the sheet stays open for retry.
++ */
++export function OnSiteCheckInSheet({
++  open,
++  onOpenChange,
++  jobLabel,
++  onConfirm,
++}) {
++  const [ack, setAck] = useState(false);
++  const [pending, setPending] = useState(false);
++
++  useEffect(() => {
++    if (!open) setAck(false);
++  }, [open]);
++
++  const handleConfirm = async () => {
++    if (!ack) return;
++    setPending(true);
++    try {
++      await Promise.resolve(onConfirm?.());
++      onOpenChange(false);
++    } finally {
++      setPending(false);
++    }
++  };
++
++  return (
++    <Sheet open={open} onOpenChange={onOpenChange}>
++      <SheetContent side="bottom" className="rounded-t-3xl max-h-[85vh] overflow-y-auto">
++        <SheetHeader className="text-left space-y-2 pb-2">
++          <div className="flex items-center gap-2">
++            <div className="h-9 w-9 rounded-full bg-purple-50 flex items-center justify-center">
++              <MapPin className="h-4 w-4 text-purple-600" />
++            </div>
++            <SheetTitle className="text-base">On-site check-in</SheetTitle>
++          </div>
++          <SheetDescription className="text-xs text-left leading-relaxed">
++            Records that you are on site — not travel, not billable time. Next: Start work, then Start timer when you bill.
++            {jobLabel ? (
++              <span className="block mt-1 font-semibold text-slate-700">{jobLabel}</span>
++            ) : null}
++          </SheetDescription>
++        </SheetHeader>
++
++        <label className="flex items-start gap-2.5 text-xs text-slate-700 cursor-pointer py-3">
++          <input
++            type="checkbox"
++            checked={ack}
++            onChange={(e) => setAck(e.target.checked)}
++            className="mt-0.5 rounded border-slate-300"
++          />
++          <span className="leading-snug">I am on site (or at the agreed work location).</span>
++        </label>
++
++        <SheetFooter className="flex-col sm:flex-col gap-2 pt-2">
++          <Button
++            className="w-full rounded-xl bg-purple-600 hover:bg-purple-700"
++            disabled={!ack || pending}
++            onClick={() => void handleConfirm()}
++          >
++            {pending ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
++            Record check-in
++          </Button>
++        </SheetFooter>
++      </SheetContent>
++    </Sheet>
++  );
++}
+diff --git a/src/components/fieldv2/FieldTimeTracker.jsx b/src/components/fieldv2/FieldTimeTracker.jsx
+index 540aaf5..d70ddcb 100644
+--- a/src/components/fieldv2/FieldTimeTracker.jsx
++++ b/src/components/fieldv2/FieldTimeTracker.jsx
+@@ -147,7 +147,7 @@ export default function FieldTimeTracker({
+         <p className={cn(FIELD_BODY, 'mb-2')}>{executionView.sessionSummaryLine}</p>
+         {canClockIn && !liveTimer.workSegmentOpen ? (
+           <p className={cn(FIELD_META, 'mb-3 leading-snug')}>
+-            Third of three readiness steps: starting the timer opens a short site check before work time is recorded.
++            After route, check-in, and start work: starting the timer runs a short on-site scope check, then records billable time only — not travel.
+           </p>
+         ) : null}
+         <div className="flex gap-2">
+diff --git a/src/components/fieldv2/JobOverview.jsx b/src/components/fieldv2/JobOverview.jsx
+index 5647a5a..58adc6a 100644
+--- a/src/components/fieldv2/JobOverview.jsx
++++ b/src/components/fieldv2/JobOverview.jsx
+@@ -113,10 +113,11 @@ export default function JobOverview({
+           Job state
+         </p>
+         <p className="text-[11px] text-slate-500 mb-2 px-0.5 leading-snug">
+-          Update travel, check-in, work, pause, and completion status here.
++          Route (ETA + travel) → check-in → start work → timer (billable only). Pause/complete in Job state.
+         </p>
+         <JobStateTransitioner
+           job={job}
++          timeEntries={timeEntries}
+           evidence={evidence}
+           runbookComplete={runbookComplete}
+           hasSignature={hasSignature}
+diff --git a/src/components/fieldv2/JobStateTransitioner.jsx b/src/components/fieldv2/JobStateTransitioner.jsx
+index 79bbf64..9b1323d 100644
+--- a/src/components/fieldv2/JobStateTransitioner.jsx
++++ b/src/components/fieldv2/JobStateTransitioner.jsx
+@@ -19,11 +19,16 @@ import { cn } from '@/lib/utils';
+ import { toast } from 'sonner';
+ import { executeJobStateTransitionMutation } from '@/lib/jobStateTransitionMutation';
+ import PreJobToolCheckModal from './PreJobToolCheckModal';
+-import { EtaAcknowledgementSheet } from '@/components/field/AcknowledgementSheets.jsx';
++import {
++  EtaAcknowledgementSheet,
++  OnSiteCheckInSheet,
++} from '@/components/field/AcknowledgementSheets.jsx';
+ import { BTN_SECONDARY, FIELD_CARD, FIELD_CTRL_H, FIELD_META } from '@/lib/fieldVisualTokens';
+ 
+ const READINESS_HINT_EN_ROUTE =
+-  'You will confirm travel / ETA details before the job moves to en route.';
++  'ETA sheet commits arrival plan and travel start; job goes en route. Work timer comes only after check-in.';
++const READINESS_HINT_CHECK_IN =
++  'Confirm you are on site before check-in. Then Start work, then the timer for billable time.';
+ const READINESS_HINT_START_WORK =
+   'A short pre-start checklist runs before the job moves to in progress.';
+ 
+@@ -51,6 +56,7 @@ function RequirementItem({ requirement, blocker }) {
+ 
+ export default function JobStateTransitioner({
+   job,
++  timeEntries = [],
+   evidence = [],
+   runbookComplete = false,
+   hasSignature = false,
+@@ -62,8 +68,10 @@ export default function JobStateTransitioner({
+   const [pendingTransition, setPendingTransition] = useState(null);
+   const [toolCheckOpen, setToolCheckOpen] = useState(false);
+   const [enRouteEtaOpen, setEnRouteEtaOpen] = useState(false);
++  const [checkInOpen, setCheckInOpen] = useState(false);
+   const pendingAfterToolCheckRef = useRef(null);
+   const pendingEnRouteRef = useRef(null);
++  const pendingCheckInRef = useRef(null);
+   const qc = useQueryClient();
+ 
+   /*
+@@ -77,6 +85,7 @@ export default function JobStateTransitioner({
+         job,
+         user,
+         evidence,
++        timeEntries,
+         toStatus,
+         fromStatus: priorStatus ?? job.status,
+         isOverride,
+@@ -118,6 +127,12 @@ export default function JobStateTransitioner({
+       return;
+     }
+ 
++    if (toStatus === 'checked_in' && !isOverride) {
++      pendingCheckInRef.current = { toStatus, isOverride, priorStatus: currentStatus };
++      setCheckInOpen(true);
++      return;
++    }
++
+     const needsToolCheck =
+       toStatus === 'in_progress' && !isOverride && currentStatus !== 'paused';
+ 
+@@ -144,15 +159,28 @@ export default function JobStateTransitioner({
+     if (p) transitionMutation.mutate(p);
+   };
+ 
+-  const completeEnRouteEtaAck = (ts) => {
+-    setEnRouteEtaOpen(false);
++  const completeEnRouteEtaAck = async (ts) => {
+     const p = pendingEnRouteRef.current;
+-    pendingEnRouteRef.current = null;
+-    if (p) {
+-      transitionMutation.mutate({
++    if (!p) return;
++    try {
++      await transitionMutation.mutateAsync({
+         ...p,
+         dispatchOverrides: { eta_ack_timestamp: ts },
+       });
++      pendingEnRouteRef.current = null;
++    } catch {
++      /* pending ref kept for retry; toast via mutation onError */
++    }
++  };
++
++  const completeOnSiteCheckIn = async () => {
++    const p = pendingCheckInRef.current;
++    if (!p) return;
++    try {
++      await transitionMutation.mutateAsync(p);
++      pendingCheckInRef.current = null;
++    } catch {
++      /* pending ref kept for retry; toast via mutation onError */
+     }
+   };
+ 
+@@ -165,11 +193,21 @@ export default function JobStateTransitioner({
+           if (!o) pendingEnRouteRef.current = null;
+         }}
+         jobLabel={job?.title}
+-        title="Start route"
+-        description="Confirm you have reviewed ETA / dispatch details before marking en route."
++        title="Head to site"
++        description="Confirms ETA and dispatch, records travel start, sets en route. Work timer stays off until after check-in."
+         onConfirm={(ts) => completeEnRouteEtaAck(ts)}
+       />
+ 
++      <OnSiteCheckInSheet
++        open={checkInOpen}
++        onOpenChange={(o) => {
++          setCheckInOpen(o);
++          if (!o) pendingCheckInRef.current = null;
++        }}
++        jobLabel={job?.title}
++        onConfirm={() => completeOnSiteCheckIn()}
++      />
++
+       <PreJobToolCheckModal
+         open={toolCheckOpen}
+         onOpenChange={(open) => {
+@@ -233,6 +271,9 @@ export default function JobStateTransitioner({
+                     {to === 'en_route' ? (
+                       <p className={cn(FIELD_META, 'mb-2 leading-snug')}>{READINESS_HINT_EN_ROUTE}</p>
+                     ) : null}
++                    {to === 'checked_in' ? (
++                      <p className={cn(FIELD_META, 'mb-2 leading-snug')}>{READINESS_HINT_CHECK_IN}</p>
++                    ) : null}
+                     {to === 'in_progress' && currentStatus !== 'paused' ? (
+                       <p className={cn(FIELD_META, 'mb-2 leading-snug')}>{READINESS_HINT_START_WORK}</p>
+                     ) : null}
+diff --git a/src/lib/__tests__/jobStateTransitionMutation.test.ts b/src/lib/__tests__/jobStateTransitionMutation.test.ts
+index 7818a37..cee7cfa 100644
+--- a/src/lib/__tests__/jobStateTransitionMutation.test.ts
++++ b/src/lib/__tests__/jobStateTransitionMutation.test.ts
+@@ -5,6 +5,10 @@ const hoisted = vi.hoisted(() => ({
+   emitDispatchEventForJobStatusChange: vi.fn().mockResolvedValue(undefined),
+   fetchJobContextForArtifactEvent: vi.fn().mockResolvedValue({ project_id: 'p99' }),
+   jobUpdate: vi.fn().mockResolvedValue({ id: 'j1', status: 'submitted' }),
++  emitCanonicalEventsForTimeEntry: vi.fn().mockResolvedValue('evt-travel'),
++  emitArrivalForClockIn: vi.fn().mockResolvedValue('evt-arrival'),
++  createTimeEntry: vi.fn().mockResolvedValue({ id: 'te1' }),
++  getTravelStartLocationOptional: vi.fn().mockResolvedValue(null),
+ }));
+ 
+ vi.mock('@/api/base44Client', () => ({
+@@ -17,6 +21,12 @@ vi.mock('@/api/base44Client', () => ({
+   },
+ }));
+ 
++vi.mock('@/api/client', () => ({
++  apiClient: {
++    createTimeEntry: hoisted.createTimeEntry,
++  },
++}));
++
+ vi.mock('@/lib/artifactEvent', () => ({
+   fetchJobContextForArtifactEvent: hoisted.fetchJobContextForArtifactEvent,
+ }));
+@@ -29,6 +39,19 @@ vi.mock('@/lib/dispatchEvent', () => ({
+   emitDispatchEventForJobStatusChange: hoisted.emitDispatchEventForJobStatusChange,
+ }));
+ 
++vi.mock('@/lib/travelArrivalEvent', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('@/lib/travelArrivalEvent')>();
++  return {
++    ...actual,
++    emitCanonicalEventsForTimeEntry: hoisted.emitCanonicalEventsForTimeEntry,
++    emitArrivalForClockIn: hoisted.emitArrivalForClockIn,
++  };
++});
++
++vi.mock('@/lib/travelGps', () => ({
++  getTravelStartLocationOptional: hoisted.getTravelStartLocationOptional,
++}));
++
+ import { executeJobStateTransitionMutation } from '@/lib/jobStateTransitionMutation';
+ 
+ const baseJob = {
+@@ -50,6 +73,10 @@ describe('executeJobStateTransitionMutation', () => {
+     hoisted.emitDispatchEventForJobStatusChange.mockResolvedValue(undefined);
+     hoisted.fetchJobContextForArtifactEvent.mockResolvedValue({ project_id: 'p99' });
+     hoisted.jobUpdate.mockResolvedValue({ id: 'j1', status: 'submitted' });
++    hoisted.emitCanonicalEventsForTimeEntry.mockResolvedValue('evt-travel');
++    hoisted.emitArrivalForClockIn.mockResolvedValue('evt-arrival');
++    hoisted.createTimeEntry.mockResolvedValue({ id: 'te1' });
++    hoisted.getTravelStartLocationOptional.mockResolvedValue(null);
+   });
+ 
+   it('emits closeout_event before dispatch_event before Job.update when submitting from pending_closeout', async () => {
+@@ -119,4 +146,128 @@ describe('executeJobStateTransitionMutation', () => {
+     });
+     expect(hoisted.emitCloseoutEvent).not.toHaveBeenCalled();
+   });
++
++  it('Iteration 15: assigned→en_route emits dispatch then travel_start then Job.update', async () => {
++    const order: string[] = [];
++    hoisted.emitDispatchEventForJobStatusChange.mockImplementation(async () => {
++      order.push('dispatch');
++    });
++    hoisted.emitCanonicalEventsForTimeEntry.mockImplementation(async (opts) => {
++      order.push(`canonical:${opts.entryType}`);
++    });
++    hoisted.createTimeEntry.mockImplementation(async () => {
++      order.push('timeEntry');
++      return { id: 'te1' };
++    });
++    hoisted.jobUpdate.mockImplementation(async () => {
++      order.push('update');
++      return {};
++    });
++
++    const eta = '2026-03-20T14:00:00.000Z';
++    await executeJobStateTransitionMutation({
++      job: { id: 'j1', status: 'assigned' },
++      user,
++      evidence: [],
++      timeEntries: [],
++      toStatus: 'en_route',
++      fromStatus: 'assigned',
++      isOverride: false,
++      overrideReason: '',
++      dispatchOverrides: { eta_ack_timestamp: eta },
++    });
++
++    expect(order).toEqual(['dispatch', 'canonical:travel_start', 'timeEntry', 'update']);
++    expect(hoisted.emitCanonicalEventsForTimeEntry).toHaveBeenCalledWith(
++      expect.objectContaining({
++        entryType: 'travel_start',
++        timestamp: eta,
++        etaAckTimestamp: eta,
++      })
++    );
++    expect(hoisted.emitArrivalForClockIn).not.toHaveBeenCalled();
++  });
++
++  it('Iteration 15: en_route→checked_in with open travel emits dispatch then travel_end then Job.update', async () => {
++    const order: string[] = [];
++    hoisted.emitDispatchEventForJobStatusChange.mockImplementation(async () => {
++      order.push('dispatch');
++    });
++    hoisted.emitCanonicalEventsForTimeEntry.mockImplementation(async (opts) => {
++      order.push(`canonical:${opts.entryType}`);
++    });
++    hoisted.createTimeEntry.mockImplementation(async () => {
++      order.push('timeEntry');
++      return { id: 'te2' };
++    });
++    hoisted.jobUpdate.mockImplementation(async () => {
++      order.push('update');
++      return {};
++    });
++
++    await executeJobStateTransitionMutation({
++      job: { id: 'j1', status: 'en_route' },
++      user,
++      evidence: [],
++      timeEntries: [
++        {
++          job_id: 'j1',
++          entry_type: 'travel_start',
++          timestamp: '2026-03-20T13:00:00.000Z',
++        },
++      ],
++      toStatus: 'checked_in',
++      fromStatus: 'en_route',
++      isOverride: false,
++      overrideReason: '',
++      dispatchOverrides: undefined,
++    });
++
++    expect(order).toEqual(['dispatch', 'canonical:travel_end', 'timeEntry', 'update']);
++    expect(hoisted.emitCanonicalEventsForTimeEntry).toHaveBeenCalledWith(
++      expect.objectContaining({
++        entryType: 'travel_end',
++        travelMinutes: expect.any(Number),
++      })
++    );
++    expect(hoisted.emitArrivalForClockIn).not.toHaveBeenCalled();
++    expect(hoisted.jobUpdate).toHaveBeenCalledWith(
++      'j1',
++      expect.objectContaining({
++        status: 'checked_in',
++        check_in_time: expect.any(String),
++      })
++    );
++  });
++
++  it('Iteration 15: en_route→checked_in without open travel emits dispatch then emitArrivalForClockIn then Job.update', async () => {
++    const order: string[] = [];
++    hoisted.emitDispatchEventForJobStatusChange.mockImplementation(async () => {
++      order.push('dispatch');
++    });
++    hoisted.emitArrivalForClockIn.mockImplementation(async () => {
++      order.push('arrival');
++      return 'a1';
++    });
++    hoisted.jobUpdate.mockImplementation(async () => {
++      order.push('update');
++      return {};
++    });
++
++    await executeJobStateTransitionMutation({
++      job: { id: 'j1', status: 'en_route' },
++      user,
++      evidence: [],
++      timeEntries: [],
++      toStatus: 'checked_in',
++      fromStatus: 'en_route',
++      isOverride: false,
++      overrideReason: '',
++      dispatchOverrides: undefined,
++    });
++
++    expect(order).toEqual(['dispatch', 'arrival', 'update']);
++    expect(hoisted.emitCanonicalEventsForTimeEntry).not.toHaveBeenCalled();
++    expect(hoisted.emitArrivalForClockIn).toHaveBeenCalledTimes(1);
++  });
+ });
+diff --git a/src/lib/canonicalFieldEventCoverage.ts b/src/lib/canonicalFieldEventCoverage.ts
+index 3299274..5bbe1a4 100644
+--- a/src/lib/canonicalFieldEventCoverage.ts
++++ b/src/lib/canonicalFieldEventCoverage.ts
+@@ -49,15 +49,22 @@ export const CANONICAL_FIELD_EVENT_COVERAGE: Record<Iteration14EventFamily, Fami
+   travel: {
+     emitterModule: 'src/lib/travelArrivalEvent.js',
+     emitExports: ['buildTravelEventPayload', 'emitCanonicalEventsForTimeEntry'],
+-    v2Surfaces: ['FieldTimeTracker: no travel_start; TimeLog/TimerPanel legacy'],
++    v2Surfaces: [
++      'JobStateTransitioner → jobStateTransitionMutation (assigned→en_route travel_start; en_route→checked_in travel_end when open segment)',
++      'TimeLog/TimerPanel legacy',
++    ],
+     notes:
+-      'INCOMPLETE in canonical v2: FieldJobDetail / FieldTimeTracker do not emit travel_start|travel_end; legacy TimerPanel/TimeLog do. Primary follow-up = Iteration 15-style travel/arrival lifecycle on the rebuilt path.',
++      'Iteration 15: dispatch_event first, then travel_event (travel_start) with optional consent GPS sample, then Job.update; travel_start/travel_end TimeEntry when apiClient succeeds. travel_start only on assigned→en_route (see jobStateTransitionMutation header). Legacy TimerPanel/TimeLog unchanged.',
+   },
+   arrival: {
+     emitterModule: 'src/lib/travelArrivalEvent.js',
+-    emitExports: ['buildArrivalEventPayload', 'emitCanonicalEventsForTimeEntry'],
+-    v2Surfaces: ['FieldTimeTracker (work_start before time entry)'],
+-    notes: 'Arrival/work_start queued before apiClient.createTimeEntry',
++    emitExports: ['buildArrivalEventPayload', 'emitCanonicalEventsForTimeEntry', 'emitArrivalForClockIn'],
++    v2Surfaces: [
++      'JobStateTransitioner → jobStateTransitionMutation (check-in: travel_end+arrival_event or emitArrivalForClockIn)',
++      'FieldTimeTracker (work_start → arrival_event work_start before TimeEntry)',
++    ],
++    notes:
++      'Check-in after dispatch: travel_end+arrival when open travel_start segment exists, else emitArrivalForClockIn only — intentional fork (see jobStateTransitionMutation). work_start path still FieldTimeTracker-only for billable timer.',
+   },
+   runbook_step: {
+     emitterModule: 'src/lib/runbookStepEvent.js',
+diff --git a/src/lib/fieldJobExecutionModel.ts b/src/lib/fieldJobExecutionModel.ts
+index c3791d7..741bff9 100644
+--- a/src/lib/fieldJobExecutionModel.ts
++++ b/src/lib/fieldJobExecutionModel.ts
+@@ -176,7 +176,10 @@ export function buildFieldJobExecutionView(job: Job, timeEntries: TimeEntry[]):
+   if (job.status === 'paused') {
+     clockInDisabledReason = 'Job is paused — resume work in Job state before using the work timer.'
+   } else if (job.status === 'assigned' || job.status === 'en_route') {
+-    clockInDisabledReason = 'Use Job state to go en route and check in before starting a work timer.'
++    clockInDisabledReason =
++      job.status === 'assigned'
++        ? 'Start route (ETA + travel) in Job state, then check in on site — the work timer is only for billable time after that.'
++        : 'Check in on site in Job state first — travel is separate from the work timer.'
+   } else if (
+     job.status === 'pending_closeout' ||
+     job.status === 'submitted' ||
+@@ -205,8 +208,11 @@ export function buildFieldJobExecutionView(job: Job, timeEntries: TimeEntry[]):
+     sessionSummaryLine = `Work timer running · ${formatWorkedDuration(timer.workedSeconds)} logged this job`
+   } else if (job.status === 'in_progress' || job.status === 'checked_in') {
+     sessionSummaryLine = 'No active work timer — start when you begin billable work on site.'
++  } else if (job.status === 'en_route') {
++    sessionSummaryLine =
++      'En route — work timer stays off until you check in on site, then start work, then start the timer for billable work.'
+   } else {
+-    sessionSummaryLine = 'Work timer unlocks after check-in / start work in Job state.'
++    sessionSummaryLine = 'Work timer unlocks after check-in and start work in Job state.'
+   }
+ 
+   return {
+diff --git a/src/lib/fieldReadinessViewModel.ts b/src/lib/fieldReadinessViewModel.ts
+index e3d736c..5a70010 100644
+--- a/src/lib/fieldReadinessViewModel.ts
++++ b/src/lib/fieldReadinessViewModel.ts
+@@ -26,11 +26,11 @@ export interface FieldReadinessSummary {
+ /** Same strings for Overview headline and `getNextStepMessage` where both apply — one story on the page. */
+ export const READINESS_SHORT_LINES = {
+   assigned:
+-    'Review site details before heading out. Going en route will ask you to confirm travel.',
++    'Review site and dispatch details. Start route captures your ETA commitment and travel start, then you are en route.',
+   en_route:
+-    'Travel to site, check in when you arrive, then start work when ready (short checklist first).',
++    'On site? Record check-in next, then Start work (tool/pre-start checklist), then the work timer when you bill — travel and work time stay separate.',
+   checked_in:
+-    'Start work when ready — a short pre-start checklist runs first. Then open Runbook and use the timer when you bill.',
++    'On site and checked in. Start work runs the pre-start checklist; the work timer is for billable work only (not travel).',
+   paused:
+     'Resume in job state when ready — the pre-start checklist does not run again. Start the timer when you bill time.',
+ } as const
+@@ -124,12 +124,12 @@ export function buildFieldReadinessSummary(
+ 
+   const routeDetail = (() => {
+     if (states.route === 'complete') {
+-      return 'Workflow past assigned (travel step used in this app — not a separate server “ETA record”).'
++      return 'Past assigned: ETA acknowledgement and travel start were captured when you went en route (dispatch + travel facts in this app).'
+     }
+     if (states.route === 'current') {
+-      return 'Next: Job state → Start route; travel confirmation runs in the sheet.'
++      return 'Next: Job state → Start route — short sheet commits ETA and records travel start before en route.'
+     }
+-    return 'Upcoming: confirm travel when you start route.'
++    return 'Upcoming: Start route when you head out; ETA sheet ties commitment to travel start.'
+   })()
+ 
+   const startDetail = (() => {
+@@ -137,12 +137,15 @@ export function buildFieldReadinessSummary(
+       return 'Pre-start checklist already done; resume does not repeat it — use Resume in job state.'
+     }
+     if (states.start_work === 'complete') {
+-      return 'Workflow past pre-start checklist (first move to in progress in this app).'
++      return 'Past on-site check-in and pre-start checklist (in progress in this app).'
+     }
+     if (states.start_work === 'current') {
++      if (job.status === 'en_route') {
++        return 'Next: check in on site (short confirmation), then Job state → Start work for the pre-start checklist.'
++      }
+       return 'Next: Job state → Start work; short checklist before in progress.'
+     }
+-    return 'Upcoming: runs when you go to in progress from checked in.'
++    return 'Upcoming: after check-in, Start work moves you to in progress.'
+   })()
+ 
+   const timerDetail = (() => {
+diff --git a/src/lib/jobStateMachine.ts b/src/lib/jobStateMachine.ts
+index 431a1f6..86b84a8 100644
+--- a/src/lib/jobStateMachine.ts
++++ b/src/lib/jobStateMachine.ts
+@@ -47,20 +47,22 @@ export const STATE_MACHINE: Record<JobStatus, StateTransition[]> = {
+     {
+       from: 'assigned',
+       to: 'en_route',
+-      label: 'Start Route',
++      label: 'Start route / head to site',
+       allowedRoles: ['technician', 'dispatcher', 'admin'],
+       evidenceRequirements: [],
+-      description: 'Technician is en route to site',
++      description:
++        'Commit ETA, record travel start, and mark the job en route — travel milestone, not work time.',
+     },
+   ],
+   en_route: [
+     {
+       from: 'en_route',
+       to: 'checked_in',
+-      label: 'Check In',
++      label: 'Check in on site',
+       allowedRoles: ['technician', 'dispatcher', 'admin'],
+       evidenceRequirements: [],
+-      description: 'Technician has arrived at site (GPS or manual)',
++      description:
++        'Confirm you are on site; records arrival/check-in and unlocks start work + readiness (separate from the work timer).',
+     },
+   ],
+   checked_in: [
+diff --git a/src/lib/jobStateTransitionMutation.ts b/src/lib/jobStateTransitionMutation.ts
+index deba409..3fed2fa 100644
+--- a/src/lib/jobStateTransitionMutation.ts
++++ b/src/lib/jobStateTransitionMutation.ts
+@@ -1,23 +1,53 @@
+ /// <reference types="vite/client" />
+ 
+ /**
+- * Job lifecycle transition: canonical telemetry ordering + Job.update payload (Iteration 14).
++ * Job lifecycle transition: canonical telemetry ordering + Job.update payload (Iteration 14–15).
+  * Closeout submit (pending_closeout → submitted): closeout_event → dispatch_event → persist.
++ * Travel/arrival (Iteration 15): dispatch first, then travel_event / travel_end+arrival / arrival-only, then persist.
++ *
++ * Known simplifications (documented for future lifecycle work, e.g. Iteration 16+):
++ * - **travel_start** is emitted only when `fromStatus === 'assigned'` and `toStatus === 'en_route'`.
++ *   Other paths (rescheduled, resumed route, etc.) are not modeled here yet.
++ * - **Check-in arrival** uses two intentional branches: if `computeOpenTravelMinutesForJob` finds an open
++ *   `travel_start` segment, we emit `travel_end` (which chains travel closure + arrival check-in).
++ *   Otherwise we emit `emitArrivalForClockIn` only. Do not collapse these without revisiting event-family
++ *   expectations and legacy jobs without `travel_start` TimeEntries.
++ * - **getTravelStartLocationOptional**: consent-gated, single optional GPS sample for travel_start payloads;
++ *   not live tracking and not guaranteed to return coordinates.
+  */
+ 
++import { apiClient } from '@/api/client';
+ import { base44 } from '@/api/base44Client';
+ import { fetchJobContextForArtifactEvent } from '@/lib/artifactEvent';
+ import { emitCloseoutEvent } from '@/lib/closeoutEvent';
+ import { emitDispatchEventForJobStatusChange } from '@/lib/dispatchEvent';
+ import { deriveCloseoutSubmissionFlags } from '@/lib/closeoutSubmissionFlags';
++import {
++  computeOpenTravelMinutesForJob,
++  emitArrivalForClockIn,
++  emitCanonicalEventsForTimeEntry,
++} from '@/lib/travelArrivalEvent';
++import { getTravelStartLocationOptional } from '@/lib/travelGps';
+ 
+ type TransitionJob = Record<string, unknown> & { id: string | number };
+ type TransitionUser = Record<string, unknown> & { email?: string };
+ 
++/** Minimal time entry shape for open-travel detection (matches API list items). */
++export type TransitionTimeEntry = {
++  entry_type?: string;
++  timestamp?: string;
++  job_id?: string | number;
++};
++
++function makeTimeEntryClientId() {
++  return `evt-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
++}
++
+ export async function executeJobStateTransitionMutation({
+   job,
+   user,
+   evidence = [],
++  timeEntries = [],
+   toStatus,
+   fromStatus,
+   isOverride,
+@@ -27,6 +57,7 @@ export async function executeJobStateTransitionMutation({
+   job: TransitionJob;
+   user: TransitionUser;
+   evidence?: Array<Record<string, unknown>>;
++  timeEntries?: TransitionTimeEntry[];
+   toStatus: string;
+   fromStatus: string;
+   isOverride: boolean;
+@@ -79,10 +110,112 @@ export async function executeJobStateTransitionMutation({
+     throw new Error(`Telemetry: ${msg}`);
+   }
+ 
++  let checkInIso: string | null = null;
++
++  /** Travel canonical emission: intentionally only assigned → en_route (see module header). */
++  const toEnRoute = toStatus === 'en_route' && fromStatus === 'assigned';
++  if (toEnRoute) {
++    const overrides =
++      dispatchOverrides && typeof dispatchOverrides === 'object' ? dispatchOverrides : {};
++    const ackRaw = overrides.eta_ack_timestamp;
++    const travelDepartureIso =
++      typeof ackRaw === 'string' && ackRaw ? ackRaw : new Date().toISOString();
++    const etaAck =
++      typeof ackRaw === 'string' && ackRaw ? ackRaw : travelDepartureIso;
++
++    let travelLocation: Record<string, unknown> | null = null;
++    try {
++      /* One-shot sample if user allowed precise location; never required; not continuous tracking. */
++      travelLocation = (await getTravelStartLocationOptional()) as Record<
++        string,
++        unknown
++      > | null;
++    } catch {
++      travelLocation = null;
++    }
++
++    try {
++      await emitCanonicalEventsForTimeEntry({
++        job,
++        user,
++        entryType: 'travel_start',
++        timestamp: travelDepartureIso,
++        etaAckTimestamp: etaAck,
++        location: travelLocation,
++      });
++    } catch (e) {
++      const msg = e instanceof Error ? e.message : String(e);
++      if (import.meta.env.DEV) console.error('[JobStateTransitioner] travel_event', e);
++      throw new Error(`Telemetry: ${msg}`);
++    }
++
++    try {
++      await apiClient.createTimeEntry(jobId, {
++        job_id: jobId,
++        entry_type: 'travel_start',
++        timestamp: travelDepartureIso,
++        source: 'app',
++        sync_status: 'pending',
++        locked: false,
++        client_request_id: makeTimeEntryClientId(),
++      });
++    } catch (e) {
++      if (import.meta.env.DEV) {
++        console.warn('[jobStateTransitionMutation] travel_start TimeEntry failed', e);
++      }
++    }
++  }
++
++  if (toStatus === 'checked_in') {
++    checkInIso = new Date().toISOString();
++    const entries = timeEntries ?? [];
++    const travelMinutes = computeOpenTravelMinutesForJob(entries, jobId, checkInIso);
++
++    try {
++      /* Intentional fork: open travel segment → travel_end + arrival in one helper; else arrival-only. */
++      if (travelMinutes !== null) {
++        await emitCanonicalEventsForTimeEntry({
++          job,
++          user,
++          entryType: 'travel_end',
++          timestamp: checkInIso,
++          travelMinutes,
++          location: null,
++        });
++        try {
++          await apiClient.createTimeEntry(jobId, {
++            job_id: jobId,
++            entry_type: 'travel_end',
++            timestamp: checkInIso,
++            source: 'app',
++            sync_status: 'pending',
++            locked: false,
++            client_request_id: makeTimeEntryClientId(),
++          });
++        } catch (e) {
++          if (import.meta.env.DEV) {
++            console.warn('[jobStateTransitionMutation] travel_end TimeEntry failed', e);
++          }
++        }
++      } else {
++        await emitArrivalForClockIn({
++          job,
++          user,
++          timestamp: checkInIso,
++          location: null,
++        });
++      }
++    } catch (e) {
++      const msg = e instanceof Error ? e.message : String(e);
++      if (import.meta.env.DEV) console.error('[JobStateTransitioner] arrival/travel_end', e);
++      throw new Error(`Telemetry: ${msg}`);
++    }
++  }
++
+   const now = new Date().toISOString();
+   const timeFields: Record<string, string> = {};
+-  if (toStatus === 'checked_in') {
+-    timeFields.check_in_time = now;
++  if (toStatus === 'checked_in' && checkInIso) {
++    timeFields.check_in_time = checkInIso;
+   }
+   if (toStatus === 'in_progress' && fromStatus !== 'paused') {
+     timeFields.work_start_time = now;
+diff --git a/src/lib/travelArrivalEvent.js b/src/lib/travelArrivalEvent.js
+index 060525c..e37655c 100644
+--- a/src/lib/travelArrivalEvent.js
++++ b/src/lib/travelArrivalEvent.js
+@@ -382,8 +382,9 @@ export async function emitCanonicalEventsForTimeEntry({
+  * @returns {number | null}
+  */
+ export function computeOpenTravelMinutesForJob(entries, jobId, endIso) {
++  const jid = jobId != null ? String(jobId) : '';
+   const forJob = [...(entries || [])]
+-    .filter((e) => e.job_id === jobId)
++    .filter((e) => e.job_id != null && String(e.job_id) === jid)
+     .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+   let lastStart = null;
+   const endT = new Date(endIso).getTime();
