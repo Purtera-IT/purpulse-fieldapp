@@ -18,6 +18,8 @@ The browser sends `Authorization: Bearer <Entra or API token>`; this handler for
 
 ## Frontend
 
-Set **`VITE_USE_ASSIGNMENTS_API=true`**, **`VITE_USE_PURPULSE_ASSIGNMENTS_PROXY=true`**, and optionally **`VITE_PURPULSE_PROXY_PATH`** if your deployed path differs from `/mock/api/purpulse`.
+**Base44-hosted (`*.base44.app`):** `src/lib/purpulseApiConfig.ts` turns on the same-origin proxy automatically when `VITE_AZURE_API_BASE_URL` is not in the bundle (no bake-time `VITE_*` required). Opt out with `VITE_USE_ASSIGNMENTS_API=false`.
 
-Do **not** rely on `VITE_AZURE_API_BASE_URL` in the client when using proxy mode.
+**Other hosts:** set **`VITE_USE_ASSIGNMENTS_API=true`** and either **`VITE_AZURE_API_BASE_URL`** (direct) or **`VITE_USE_PURPULSE_ASSIGNMENTS_PROXY=true`**, plus optional **`VITE_PURPULSE_PROXY_PATH`** if not `/mock/api/purpulse`.
+
+Do **not** put the Azure API URL in the client when using proxy mode — only the Deno function needs **`PURPULSE_API_BASE_URL`** in Secrets.

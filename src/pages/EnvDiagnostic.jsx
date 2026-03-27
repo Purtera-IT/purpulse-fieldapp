@@ -5,6 +5,11 @@
  */
 import React, { useState } from 'react';
 import { CheckCircle, XCircle, AlertTriangle, RefreshCw } from 'lucide-react';
+import {
+  isBase44AppHost,
+  isPurpulseAssignmentsDataSource,
+  purpulseFetchUrl,
+} from '@/lib/purpulseApiConfig';
 
 const FLAG_DEFINITIONS = [
   {
@@ -16,10 +21,11 @@ const FLAG_DEFINITIONS = [
   },
   {
     key: 'VITE_AZURE_API_BASE_URL',
-    expected: null, // just needs to be non-empty
-    label: 'Azure API base URL',
-    critical: true,
-    help: 'e.g. https://api-test.purpulse.app — no trailing slash',
+    expected: null, // just needs to be non-empty for direct browser→Azure mode
+    label: 'Azure API base URL (direct mode)',
+    critical: false,
+    help:
+      'Required for direct calls from the browser. On *.base44.app without this, the app uses the same-origin purpulseAssignmentsProxy (Secrets: PURPULSE_API_BASE_URL).',
   },
   {
     key: 'VITE_USE_ENTRA_TOKEN_FOR_AZURE_API',
@@ -48,6 +54,13 @@ const FLAG_DEFINITIONS = [
     label: 'Entra API Scope',
     critical: false,
     help: 'e.g. api://{client-id}/Assignments.Read',
+  },
+  {
+    key: 'VITE_USE_PURPULSE_ASSIGNMENTS_PROXY',
+    expected: null,
+    label: 'Force same-origin proxy (optional)',
+    critical: false,
+    help: 'Usually not needed on *.base44.app — hostname enables proxy automatically when VITE_AZURE_API_BASE_URL is empty.',
   },
 ];
 
@@ -102,11 +115,9 @@ export default function EnvDiagnostic() {
   const [apiStatus, setApiStatus] = useState(null); // null | 'checking' | 'ok' | 'error' | 'cors'
   const [apiDetail, setApiDetail] = useState('');
 
-  const usePurpulse = import.meta.env.VITE_USE_ASSIGNMENTS_API === 'true'
-    && typeof import.meta.env.VITE_AZURE_API_BASE_URL === 'string'
-    && import.meta.env.VITE_AZURE_API_BASE_URL.trim().length > 0;
-
+  const livePurpulse = isPurpulseAssignmentsDataSource();
   const baseUrl = (import.meta.env.VITE_AZURE_API_BASE_URL || '').replace(/\/$/, '');
+  const proxyMePreview = purpulseFetchUrl('/api/me');
 
   async function checkApiReachability() {
     if (!baseUrl) return;
@@ -136,7 +147,7 @@ export default function EnvDiagnostic() {
     }
   }
 
-  const criticalMissing = FLAG_DEFINITIONS.filter(d => d.critical).some(d => {
+  const criticalMissing = !livePurpulse && FLAG_DEFINITIONS.filter(d => d.critical).some(d => {
     const raw = getEnvValue(d.key);
     return d.expected ? raw !== d.expected : !raw;
   });
@@ -165,13 +176,28 @@ export default function EnvDiagnostic() {
           <div>
             <p className={`text-sm font-bold ${criticalMissing ? 'text-red-800' : 'text-emerald-800'}`}>
               {criticalMissing
-                ? 'Critical env vars missing — app is using Base44 demo jobs'
-                : 'Critical env vars present — Azure Assignments API is active'
+                ? 'PurPulse assignments are off — app is using Base44 demo jobs'
+                : 'PurPulse assignments path is active (direct Azure or Base44 proxy)'
               }
             </p>
             <p className="text-xs text-slate-600 mt-0.5">
-              Job source: <strong>{usePurpulse ? 'Azure API (GET /api/assignments)' : 'Base44 entities (demo data)'}</strong>
+              Job source:{' '}
+              <strong>
+                {livePurpulse
+                  ? 'Azure API via GET /api/me + /api/assignments'
+                  : 'Base44 entities (demo data)'}
+              </strong>
             </p>
+            {livePurpulse && (
+              <p className="text-[11px] text-slate-500 mt-1 font-mono break-all">
+                Fetch target /api/me → <span className="text-slate-700">{proxyMePreview || '(empty)'}</span>
+                {isBase44AppHost() && !baseUrl && (
+                  <span className="block mt-0.5 text-slate-400">
+                    *.base44.app: using same-origin proxy; set PURPULSE_API_BASE_URL in Base44 Secrets for the function.
+                  </span>
+                )}
+              </p>
+            )}
           </div>
         </div>
 
@@ -227,14 +253,19 @@ export default function EnvDiagnostic() {
         )}
 
         <div className="bg-slate-100 rounded-2xl p-4">
-          <p className="text-xs font-bold text-slate-600 mb-1">Next steps if env vars are missing:</p>
+          <p className="text-xs font-bold text-slate-600 mb-1">Base44 without bake-time VITE_*</p>
+          <p className="text-xs text-slate-500 mb-2">
+            On <code className="font-mono">*.base44.app</code>, assignments turn on automatically unless{' '}
+            <code className="font-mono">VITE_USE_ASSIGNMENTS_API=false</code>. Add Secret{' '}
+            <code className="font-mono">PURPULSE_API_BASE_URL=https://api-test.purpulse.app</code> for the proxy function.
+            Match <code className="font-mono">VITE_PURPULSE_PROXY_PATH</code> to the function URL path if not{' '}
+            <code className="font-mono">/mock/api/purpulse</code>.
+          </p>
+          <p className="text-xs font-bold text-slate-600 mb-1">Local / Azure Web App (direct to API)</p>
           <ol className="text-xs text-slate-500 space-y-1 list-decimal list-inside">
-            <li>Go to Base44 Dashboard → Code → Environment Variables</li>
-            <li>Set <code className="font-mono">VITE_USE_ASSIGNMENTS_API=true</code> and <code className="font-mono">VITE_AZURE_API_BASE_URL</code></li>
-            <li>Click Publish / Deploy to rebuild the bundle</li>
-            <li>Reload this page — flags should turn green</li>
+            <li>Set <code className="font-mono">VITE_USE_ASSIGNMENTS_API=true</code> and <code className="font-mono">VITE_AZURE_API_BASE_URL</code> in <code className="font-mono">.env</code></li>
+            <li>Rebuild / publish</li>
           </ol>
-          <p className="text-xs text-slate-400 mt-2">See <code className="font-mono">docs/ENV_SETUP.md</code> for the full variable reference.</p>
         </div>
 
       </div>
